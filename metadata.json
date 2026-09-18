@@ -1,6 +1,6 @@
 {
   "name": "FolioCraft - Automated Photo Album Engine & Canvas Editor",
-  "description": "Comprehensive SaaS architecture, AI layout solver, and interactive 2-page print spread canvas editor with safe/bleed/gutter guides, photo swapping, pan-and-zoom cropping, and 300 DPI CMYK print pipeline.",
+  "description": "Comprehensive automated photo album engine with ceremony auto-theming, realistic print finish previews (Matte, Glossy, Silk), safe/bleed/gutter guides, intelligent photo pool filtering by quality, orientation, and timestamp clusters, and interactive 2-page print spread canvas editor.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

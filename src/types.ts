@@ -2,6 +2,63 @@ export type Orientation = 'landscape' | 'portrait' | 'square';
 
 export type EventType = 'indian_wedding' | 'western_wedding' | 'birthday' | 'anniversary' | 'custom';
 
+export interface CulturalColorPalette {
+  id: string;
+  name: string;
+  category: 'indian_wedding' | 'classic' | 'modern';
+  description: string;
+  primary: string; // e.g. Royal Sindoor Maroon
+  secondary: string; // e.g. Imperial Metallic Gold
+  accent: string; // e.g. Marigold Saffron / Emerald
+  background: string; // Canvas spread backdrop
+  surface: string; // Card / frame inset surface
+  textPrimary: string;
+  borderStroke: string;
+  swatchColors: string[];
+}
+
+export interface FrameBorderStyle {
+  id: string;
+  name: string;
+  category: 'indian_wedding' | 'classic';
+  description: string;
+  borderWidth: number; // in px
+  innerPadding: number; // in px
+  borderStyle: 'solid' | 'double' | 'groove';
+  cornerMotif: 'jaali_lattice' | 'mandala_flourish' | 'paisley_corner' | 'mandap_arch' | 'ornate_bracket' | 'minimal_accent';
+  patternType: 'none' | 'geometric_jaali' | 'zardozi_filigree' | 'marigold_motif';
+  borderColor: string;
+  accentColor: string;
+  hasGlow: boolean;
+}
+
+export type PaperFinish = 'matte' | 'glossy' | 'silk';
+
+export interface AutoThemeAnalysis {
+  paletteId: string;
+  borderStyleId: string;
+  confidenceScore: number; // 0..100
+  matchedCeremonyFocus: string;
+  primaryRationale: string;
+  attributes: {
+    warmth: 'warm' | 'cool' | 'balanced';
+    contrast: 'high' | 'subtle';
+    formality: 'royal_ceremonial' | 'festive_vibrant' | 'minimal_editorial';
+  };
+  recommendedFinish: PaperFinish;
+}
+
+export interface CulturalThemeConfig {
+  enabled: boolean;
+  activePaletteId: string;
+  activeBorderStyleId: string;
+  showCornerMotifs: boolean;
+  showBackgroundTexture: boolean;
+  showGoldFoilAccent: boolean;
+  paperFinish: PaperFinish;
+  autoThemeRationale?: string;
+}
+
 export interface EventBatch {
   id: EventType;
   name: string;
@@ -11,6 +68,8 @@ export interface EventBatch {
   photos: ImageAsset[];
   defaultSpreads: PageSpread[];
   aiPromptSuggestions: string[];
+  culturalPalettes?: CulturalColorPalette[];
+  frameBorderStyles?: FrameBorderStyle[];
 }
 
 export interface SaliencyRegion {

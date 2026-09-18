@@ -30,6 +30,7 @@ interface HeaderProps {
   currentEventType: EventType;
   onChangeEventType: (type: EventType) => void;
   onOpenAiStudio: () => void;
+  onOpenPrintPreview?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -46,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
   currentEventType,
   onChangeEventType,
   onOpenAiStudio,
+  onOpenPrintPreview,
 }) => {
   const [showGuidesMenu, setShowGuidesMenu] = useState(false);
   const [showEventMenu, setShowEventMenu] = useState(false);
@@ -319,6 +321,19 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
         </div>
+
+        {/* Physical Print Preview Button */}
+        {onOpenPrintPreview && (
+          <button
+            id="btn-header-print-preview"
+            onClick={onOpenPrintPreview}
+            className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-850 text-amber-400 border border-stone-800 hover:border-amber-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+            title="Simulate Physical Print & Paper Finishes (Bleed-to-Trim)"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Preview</span>
+          </button>
+        )}
 
         {/* Preflight Status & 300 DPI Export Button */}
         <button

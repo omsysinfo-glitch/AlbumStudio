@@ -1,4 +1,12 @@
-import { ImageAsset, SpreadTemplate, PageSpread, PrintDimensions } from '../types';
+import {
+  ImageAsset,
+  SpreadTemplate,
+  PageSpread,
+  PrintDimensions,
+  CulturalColorPalette,
+  FrameBorderStyle,
+  CulturalThemeConfig,
+} from '../types';
 
 export const DEFAULT_PRINT_DIMENSIONS: PrintDimensions = {
   spreadWidthInches: 24.0, // 24" wide (two 12"x12" pages)
@@ -947,9 +955,167 @@ export const INDIAN_WEDDING_SPREADS: PageSpread[] = [
   },
 ];
 
+// Cultural Color Palettes for Indian Wedding & Celebrations
+export const INDIAN_WEDDING_COLOR_PALETTES: CulturalColorPalette[] = [
+  {
+    id: 'iw-palette-royal-maroon',
+    name: 'Royal Sindoor Maroon & Gilt Gold',
+    category: 'indian_wedding',
+    description: 'Deep royal crimson velvet with imperial gold trim and warm raw silk ivory paper.',
+    primary: '#7B1113', // Sindoor / Royal Maroon
+    secondary: '#D4AF37', // Imperial Metallic Gold
+    accent: '#F5D77F', // Champagne Gilt
+    background: '#FFFDF7', // Raw Silk Ivory
+    surface: '#FBF7F0',
+    textPrimary: '#380609',
+    borderStroke: '#C69214',
+    swatchColors: ['#7B1113', '#D4AF37', '#F5D77F', '#FFFDF7'],
+  },
+  {
+    id: 'iw-palette-haldi-saffron',
+    name: 'Festive Haldi & Marigold Ochre',
+    category: 'indian_wedding',
+    description: 'Vibrant marigold yellow, sacred saffron, and auspicious terracotta accents.',
+    primary: '#D35400', // Terracotta Saffron
+    secondary: '#F39C12', // Marigold Yellow
+    accent: '#F1C40F', // Golden Turmeric
+    background: '#FFFDF0', // Jasmine Floral Cream
+    surface: '#FCF8EB',
+    textPrimary: '#4A2306',
+    borderStroke: '#E67E22',
+    swatchColors: ['#D35400', '#F39C12', '#F1C40F', '#FFFDF0'],
+  },
+  {
+    id: 'iw-palette-mehendi-emerald',
+    name: 'Mehendi Emerald & Henna Cinnamon',
+    category: 'indian_wedding',
+    description: 'Lush Brunswick emerald green, rich henna brown, and antique brass filigree.',
+    primary: '#1B4D3E', // Royal Emerald
+    secondary: '#C5A059', // Antique Gold
+    accent: '#7A3816', // Henna Cinnamon
+    background: '#F8FBF9', // Mint Silk
+    surface: '#EFF7F2',
+    textPrimary: '#0C261E',
+    borderStroke: '#2D6A4F',
+    swatchColors: ['#1B4D3E', '#C5A059', '#7A3816', '#F8FBF9'],
+  },
+  {
+    id: 'iw-palette-rajputana-dark',
+    name: 'Midnight Rajputana Velvet (Dark Luxury)',
+    category: 'indian_wedding',
+    description: 'Opulent palace midnight crimson velvet with illuminated gold leaf insets.',
+    primary: '#3F050B', // Midnight Crimson
+    secondary: '#F2D06B', // Molten Gold
+    accent: '#E05A47', // Vermillion Accent
+    background: '#1F0408', // Deep Velvet Noir
+    surface: '#2C060D',
+    textPrimary: '#FCEFD2',
+    borderStroke: '#D4AF37',
+    swatchColors: ['#3F050B', '#F2D06B', '#1F0408', '#FCEFD2'],
+  },
+  {
+    id: 'iw-palette-palace-rosegold',
+    name: 'Udaipur Palace Rose Gold & Pearl',
+    category: 'indian_wedding',
+    description: 'Soft lotus petal rose gold, sandalwood, and shimmering mother-of-pearl.',
+    primary: '#A3485E', // Rose Gold Crimson
+    secondary: '#D4AF37', // Polished Brass Gold
+    accent: '#8B4513', // Sandalwood
+    background: '#FDFBF9', // Pearl White
+    surface: '#F7F0EC',
+    textPrimary: '#421520',
+    borderStroke: '#C08081',
+    swatchColors: ['#A3485E', '#D4AF37', '#FDFBF9', '#8B4513'],
+  },
+];
+
+// Frame Border Styles with geometric patterns and cultural motifs
+export const INDIAN_WEDDING_BORDER_STYLES: FrameBorderStyle[] = [
+  {
+    id: 'iw-border-jaali',
+    name: 'Intricate Mughal Jaali Lattice',
+    category: 'indian_wedding',
+    description: 'Traditional Mughal palace geometric jaali window lattice corners with gold inset border.',
+    borderWidth: 3,
+    innerPadding: 8,
+    borderStyle: 'solid',
+    cornerMotif: 'jaali_lattice',
+    patternType: 'geometric_jaali',
+    borderColor: '#C69214',
+    accentColor: '#7B1113',
+    hasGlow: true,
+  },
+  {
+    id: 'iw-border-zardozi',
+    name: 'Royal Zardozi Gold Double Fillet',
+    category: 'indian_wedding',
+    description: 'Double metallic gold embroidery fillets with ornate corner flourishes and drop shadow.',
+    borderWidth: 4,
+    innerPadding: 6,
+    borderStyle: 'double',
+    cornerMotif: 'mandala_flourish',
+    patternType: 'zardozi_filigree',
+    borderColor: '#D4AF37',
+    accentColor: '#F5D77F',
+    hasGlow: true,
+  },
+  {
+    id: 'iw-border-maroon-gold',
+    name: 'Sindoor Maroon & Gold Inset Mat',
+    category: 'indian_wedding',
+    description: 'Deep crimson velvet matting border framed with polished 1.5pt gold wire piping.',
+    borderWidth: 5,
+    innerPadding: 10,
+    borderStyle: 'solid',
+    cornerMotif: 'ornate_bracket',
+    patternType: 'none',
+    borderColor: '#7B1113',
+    accentColor: '#D4AF37',
+    hasGlow: false,
+  },
+  {
+    id: 'iw-border-mandap-arch',
+    name: 'Mandap Scalloped Arch Corners',
+    category: 'indian_wedding',
+    description: 'Scalloped temple cusp arches framing each image with floral corner rosettes.',
+    borderWidth: 3,
+    innerPadding: 8,
+    borderStyle: 'solid',
+    cornerMotif: 'mandap_arch',
+    patternType: 'marigold_motif',
+    borderColor: '#E67E22',
+    accentColor: '#F39C12',
+    hasGlow: false,
+  },
+  {
+    id: 'iw-border-minimal-gold',
+    name: 'Regal Hairline Gold Accent',
+    category: 'indian_wedding',
+    description: 'Subtle high-fashion metallic gold corner brackets for contemporary luxury.',
+    borderWidth: 2,
+    innerPadding: 4,
+    borderStyle: 'solid',
+    cornerMotif: 'minimal_accent',
+    patternType: 'none',
+    borderColor: '#D4AF37',
+    accentColor: '#D4AF37',
+    hasGlow: false,
+  },
+];
+
+export const DEFAULT_CULTURAL_THEME_CONFIG: CulturalThemeConfig = {
+  enabled: true,
+  activePaletteId: 'iw-palette-royal-maroon',
+  activeBorderStyleId: 'iw-border-jaali',
+  showCornerMotifs: true,
+  showBackgroundTexture: true,
+  showGoldFoilAccent: true,
+  paperFinish: 'silk',
+};
+
 // Complete Multi-Event Catalog
 export const EVENT_BATCHES: Record<string, {
-  id: string;
+  id: any;
   name: string;
   subtitle: string;
   description: string;
@@ -957,6 +1123,8 @@ export const EVENT_BATCHES: Record<string, {
   photos: ImageAsset[];
   defaultSpreads: PageSpread[];
   aiPromptSuggestions: string[];
+  culturalPalettes?: CulturalColorPalette[];
+  frameBorderStyles?: FrameBorderStyle[];
 }> = {
   indian_wedding: {
     id: 'indian_wedding',
@@ -966,6 +1134,8 @@ export const EVENT_BATCHES: Record<string, {
     tag: 'Indian Wedding',
     photos: INDIAN_WEDDING_PHOTOS,
     defaultSpreads: INDIAN_WEDDING_SPREADS,
+    culturalPalettes: INDIAN_WEDDING_COLOR_PALETTES,
+    frameBorderStyles: INDIAN_WEDDING_BORDER_STYLES,
     aiPromptSuggestions: [
       'Bride in royal crimson Sabyasachi lehenga with gold zardozi embroidery and emerald necklace, looking towards camera, warm palace lighting',
       'Joyful Haldi ceremony moment with yellow marigold petals showering over the smiling bride and groom in raw silk kurtas',

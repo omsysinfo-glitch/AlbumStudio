@@ -11,14 +11,20 @@ import {
   GuideVisibility,
   FrameSlot,
   EventType,
+  CulturalThemeConfig,
+  AutoThemeAnalysis,
 } from './types';
 import {
   DEFAULT_PRINT_DIMENSIONS,
   SPREAD_TEMPLATES,
   EVENT_BATCHES,
+  DEFAULT_CULTURAL_THEME_CONFIG,
+  INDIAN_WEDDING_COLOR_PALETTES,
+  INDIAN_WEDDING_BORDER_STYLES,
 } from './data/mockAlbumData';
 import { solveAlbumSpreads } from './utils/layoutSolver';
 import { runAlbumPreflightAudit } from './utils/printPreflight';
+import { analyzeAndAutoTheme } from './utils/autoThemeEngine';
 import { Header } from './components/Header';
 import { SpreadCanvasEditor } from './components/SpreadCanvasEditor';
 import { PhotoPoolSidebar } from './components/PhotoPoolSidebar';
@@ -26,7 +32,8 @@ import { ArchitectureHub } from './components/ArchitectureHub';
 import { SolverInspector } from './components/SolverInspector';
 import { PrintExportModal } from './components/PrintExportModal';
 import { AiImageStudioModal } from './components/AiImageStudioModal';
-import { X, Calendar, Sparkles, Wand2 } from 'lucide-react';
+import { PrintPreviewModal } from './components/PrintPreviewModal';
+import { X, Calendar, Sparkles, Wand2, Check, Printer, ChevronRight } from 'lucide-react';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<'canvas' | 'solver' | 'architecture'>('canvas');
@@ -41,7 +48,9 @@ export default function App() {
 
   // Modals
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
   const [inspectingPhoto, setInspectingPhoto] = useState<ImageAsset | null>(null);
+  const [showAutoThemeBanner, setShowAutoThemeBanner] = useState(true);
 
   // AI Photo Studio State (Gemini 3.1 Flash Image)
   const [isAiStudioOpen, setIsAiStudioOpen] = useState(false);
@@ -60,13 +69,73 @@ export default function App() {
 
   const printDimensions: PrintDimensions = DEFAULT_PRINT_DIMENSIONS;
 
+  // Cultural Elements & Theming State (Intelligently Auto-Themed on Initialization)
+  const initialPalettes = initialEventBatch.culturalPalettes || INDIAN_WEDDING_COLOR_PALETTES;
+  const initialBorderStyles = initialEventBatch.frameBorderStyles || INDIAN_WEDDING_BORDER_STYLES;
+
+  const [autoThemeAnalysis, setAutoThemeAnalysis] = useState<AutoThemeAnalysis | null>(() => {
+    return analyzeAndAutoTheme('indian_wedding', initialEventBatch.photos, initialPalettes, initialBorderStyles);
+  });
+
+  const [culturalTheme, setCulturalTheme] = useState<CulturalThemeConfig>(() => {
+    const analysis = analyzeAndAutoTheme('indian_wedding', initialEventBatch.photos, initialPalettes, initialBorderStyles);
+    return {
+      enabled: true,
+      activePaletteId: analysis.paletteId,
+      activeBorderStyleId: analysis.borderStyleId,
+      showCornerMotifs: true,
+      showBackgroundTexture: true,
+      showGoldFoilAccent: true,
+      paperFinish: analysis.recommendedFinish,
+      autoThemeRationale: analysis.primaryRationale,
+    };
+  });
+
+  const handleUpdateCulturalTheme = (updates: Partial<CulturalThemeConfig>) => {
+    setCulturalTheme((prev) => ({ ...prev, ...updates }));
+  };
+
+  const currentPalettes = EVENT_BATCHES[currentEventType]?.culturalPalettes || INDIAN_WEDDING_COLOR_PALETTES;
+  const currentBorderStyles = EVENT_BATCHES[currentEventType]?.frameBorderStyles || INDIAN_WEDDING_BORDER_STYLES;
+
   // Switch Event Batch (Indian Wedding, Birthday, Anniversary, etc.)
+  // Automatically runs Auto-Theme Engine on newly selected batch!
   const handleChangeEventType = (newType: EventType) => {
     setCurrentEventType(newType);
     const batch = EVENT_BATCHES[newType] || EVENT_BATCHES.indian_wedding;
     setPhotos(batch.photos);
     setSpreads(batch.defaultSpreads);
     setCurrentSpreadIndex(0);
+
+    const palettes = batch.culturalPalettes || INDIAN_WEDDING_COLOR_PALETTES;
+    const borderStyles = batch.frameBorderStyles || INDIAN_WEDDING_BORDER_STYLES;
+    const analysis = analyzeAndAutoTheme(newType, batch.photos, palettes, borderStyles);
+
+    setAutoThemeAnalysis(analysis);
+    setCulturalTheme((prev) => ({
+      ...prev,
+      enabled: true,
+      activePaletteId: analysis.paletteId,
+      activeBorderStyleId: analysis.borderStyleId,
+      paperFinish: analysis.recommendedFinish,
+      autoThemeRationale: analysis.primaryRationale,
+    }));
+    setShowAutoThemeBanner(true);
+  };
+
+  // Re-run Auto-Theme on current photo pool
+  const handleTriggerAutoTheme = () => {
+    const analysis = analyzeAndAutoTheme(currentEventType, photos, currentPalettes, currentBorderStyles);
+    setAutoThemeAnalysis(analysis);
+    setCulturalTheme((prev) => ({
+      ...prev,
+      enabled: true,
+      activePaletteId: analysis.paletteId,
+      activeBorderStyleId: analysis.borderStyleId,
+      paperFinish: analysis.recommendedFinish,
+      autoThemeRationale: analysis.primaryRationale,
+    }));
+    setShowAutoThemeBanner(true);
   };
 
   // Build O(1) image lookup map
@@ -303,6 +372,7 @@ export default function App() {
         currentEventType={currentEventType}
         onChangeEventType={handleChangeEventType}
         onOpenAiStudio={() => handleOpenAiStudio(null, null)}
+        onOpenPrintPreview={() => setIsPrintPreviewOpen(true)}
       />
 
       {/* Main App Workspace */}
@@ -318,6 +388,13 @@ export default function App() {
               onTriggerAutoSolver={handleTriggerAutoSolver}
               onOpenAiStudio={(p) => handleOpenAiStudio(p || null, null)}
               currentEventType={currentEventType}
+              culturalTheme={culturalTheme}
+              onUpdateCulturalTheme={handleUpdateCulturalTheme}
+              culturalPalettes={currentPalettes}
+              frameBorderStyles={currentBorderStyles}
+              onTriggerAutoTheme={handleTriggerAutoTheme}
+              autoThemeAnalysis={autoThemeAnalysis}
+              onOpenPrintPreview={() => setIsPrintPreviewOpen(true)}
             />
 
             {/* Center Spread Canvas Workspace */}
@@ -334,6 +411,11 @@ export default function App() {
                 onChangeTemplate={handleChangeTemplate}
                 onSelectPhotoToPreview={(img) => setInspectingPhoto(img)}
                 onOpenAiStudioForSlot={(slotId, img) => handleOpenAiStudio(img || null, slotId)}
+                culturalTheme={culturalTheme}
+                culturalPalettes={currentPalettes}
+                frameBorderStyles={currentBorderStyles}
+                onOpenPrintPreview={() => setIsPrintPreviewOpen(true)}
+                onTriggerAutoTheme={handleTriggerAutoTheme}
               />
             </div>
           </>
@@ -369,6 +451,77 @@ export default function App() {
         imageMap={imageMap}
         printDimensions={printDimensions}
       />
+
+      {/* Physical Print Preview Modal (Matte / Glossy / Silk Simulation) */}
+      <PrintPreviewModal
+        isOpen={isPrintPreviewOpen}
+        onClose={() => setIsPrintPreviewOpen(false)}
+        spreads={spreads}
+        currentSpreadIndex={currentSpreadIndex}
+        onSelectSpreadIndex={setCurrentSpreadIndex}
+        imageMap={imageMap}
+        printDimensions={printDimensions}
+        culturalTheme={culturalTheme}
+        onUpdateCulturalTheme={handleUpdateCulturalTheme}
+        culturalPalettes={currentPalettes}
+        frameBorderStyles={currentBorderStyles}
+        onOpenExportModal={() => {
+          setIsPrintPreviewOpen(false);
+          setIsExportModalOpen(true);
+        }}
+        autoThemeAnalysis={autoThemeAnalysis}
+      />
+
+      {/* Auto-Theme Notification Toast (Dismissible) */}
+      {showAutoThemeBanner && autoThemeAnalysis && (
+        <div
+          id="auto-theme-status-toast"
+          className="fixed bottom-4 right-4 z-40 max-w-md p-3.5 rounded-xl bg-stone-900/95 border border-amber-500/40 shadow-2xl backdrop-blur-md flex items-start gap-3 transition-all"
+        >
+          <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+            <Wand2 className="w-3.5 h-3.5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                Auto-Themed for {currentEventType === 'indian_wedding' ? 'Indian Wedding' : currentEventType}
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-200">
+                  {autoThemeAnalysis.confidenceScore}% Match
+                </span>
+              </span>
+              <button
+                onClick={() => setShowAutoThemeBanner(false)}
+                className="text-stone-400 hover:text-stone-200 p-0.5 rounded cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <p className="text-[11px] text-stone-300 mt-1 leading-snug">
+              {autoThemeAnalysis.primaryRationale}
+            </p>
+            <div className="flex items-center gap-3 mt-2">
+              <button
+                id="toast-btn-print-preview"
+                onClick={() => {
+                  setShowAutoThemeBanner(false);
+                  setIsPrintPreviewOpen(true);
+                }}
+                className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <Printer className="w-3 h-3" />
+                <span>Simulate Print ({culturalTheme.paperFinish.toUpperCase()})</span>
+                <ChevronRight className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => setShowAutoThemeBanner(false)}
+                className="text-[11px] text-stone-400 hover:text-stone-300 cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Photo Saliency & Metadata Detail Modal */}
       {inspectingPhoto && (

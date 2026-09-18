@@ -6,9 +6,17 @@ import {
   PrintDimensions,
   GuideVisibility,
   SpreadTemplate,
+  CulturalThemeConfig,
+  CulturalColorPalette,
+  FrameBorderStyle,
 } from '../types';
 import { calculateEffectiveDpi } from '../utils/printPreflight';
 import { checkGutterIntersection, checkSaliencyInGutter } from '../utils/layoutSolver';
+import {
+  CornerMotif,
+  SpreadCulturalWatermark,
+  CenterGutterMedallion,
+} from './CulturalMotifs';
 import {
   ZoomIn,
   ZoomOut,
@@ -25,6 +33,8 @@ import {
   Sparkles,
   Maximize2,
   Wand2,
+  Palette,
+  Printer,
 } from 'lucide-react';
 
 interface SpreadCanvasEditorProps {
@@ -39,6 +49,11 @@ interface SpreadCanvasEditorProps {
   onChangeTemplate: (templateId: string) => void;
   onSelectPhotoToPreview?: (image: ImageAsset) => void;
   onOpenAiStudioForSlot?: (slotId: string, image?: ImageAsset | null) => void;
+  culturalTheme?: CulturalThemeConfig;
+  culturalPalettes?: CulturalColorPalette[];
+  frameBorderStyles?: FrameBorderStyle[];
+  onOpenPrintPreview?: () => void;
+  onTriggerAutoTheme?: () => void;
 }
 
 export const SpreadCanvasEditor: React.FC<SpreadCanvasEditorProps> = ({
@@ -53,7 +68,16 @@ export const SpreadCanvasEditor: React.FC<SpreadCanvasEditorProps> = ({
   onChangeTemplate,
   onSelectPhotoToPreview,
   onOpenAiStudioForSlot,
+  culturalTheme,
+  culturalPalettes = [],
+  frameBorderStyles = [],
+  onOpenPrintPreview,
+  onTriggerAutoTheme,
 }) => {
+  const isCultural = !!culturalTheme?.enabled;
+  const activePalette = culturalPalettes.find((p) => p.id === culturalTheme?.activePaletteId) || culturalPalettes[0];
+  const activeBorder = frameBorderStyles.find((b) => b.id === culturalTheme?.activeBorderStyleId) || frameBorderStyles[0];
+
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(
     currentSpread.slots[0]?.id || null
   );
@@ -231,25 +255,57 @@ export const SpreadCanvasEditor: React.FC<SpreadCanvasEditorProps> = ({
               <span className="text-xs px-2 py-0.5 rounded bg-stone-800 text-stone-400 font-mono">
                 {printDimensions.spreadWidthInches}&quot; &times; {printDimensions.spreadHeightInches}&quot; (300 DPI)
               </span>
+              {isCultural && activePalette && (
+                <span
+                  className="text-[10px] px-2 py-0.5 rounded-full font-semibold border flex items-center gap-1.5 shadow-xs"
+                  style={{
+                    backgroundColor: `${activePalette.primary}20`,
+                    borderColor: `${activePalette.secondary}80`,
+                    color: activePalette.secondary,
+                  }}
+                >
+                  <Palette className="w-3 h-3" />
+                  <span>{activePalette.name}</span>
+                  <span className="opacity-60">&bull;</span>
+                  <span>{activeBorder?.name}</span>
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Template Quick Selector */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-stone-400 font-medium">Layout Template:</label>
-          <select
-            id="template-select-dropdown"
-            value={currentSpread.templateId}
-            onChange={(e) => onChangeTemplate(e.target.value)}
-            className="bg-stone-900 border border-stone-700 text-stone-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-500"
-          >
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} ({t.photoCount} {t.photoCount === 1 ? 'photo' : 'photos'})
-              </option>
-            ))}
-          </select>
+        {/* Template Quick Selector & Print Preview Toggle */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-stone-400 font-medium">Layout Template:</label>
+            <select
+              id="template-select-dropdown"
+              value={currentSpread.templateId}
+              onChange={(e) => onChangeTemplate(e.target.value)}
+              className="bg-stone-900 border border-stone-700 text-stone-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            >
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.photoCount} {t.photoCount === 1 ? 'photo' : 'photos'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {onOpenPrintPreview && (
+            <button
+              id="btn-canvas-open-print-preview"
+              onClick={onOpenPrintPreview}
+              className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              title="Preview Bleed-to-Trim Physical Print with Matte, Glossy, or Silk finishes"
+            >
+              <Printer className="w-3.5 h-3.5 text-amber-400" />
+              <span>Print Preview</span>
+              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 capitalize">
+                {culturalTheme?.paperFinish || 'Silk'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -263,10 +319,24 @@ export const SpreadCanvasEditor: React.FC<SpreadCanvasEditorProps> = ({
           id="two-page-print-spread"
           className="relative w-full max-w-5xl aspect-[2/1] shadow-2xl rounded-sm transition-all duration-200"
           style={{
-            backgroundColor: currentSpread.background || '#FFFFFF',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)',
+            backgroundColor: isCultural && activePalette ? activePalette.background : (currentSpread.background || '#FFFFFF'),
+            boxShadow: isCultural && activePalette
+              ? `0 25px 60px -12px ${activePalette.primary}30, 0 0 25px ${activePalette.secondary}20`
+              : '0 25px 50px -12px rgba(0, 0, 0, 0.75)',
           }}
         >
+          {/* Cultural Background Watermark & Spine Gutter Medallions */}
+          {isCultural && activePalette && activeBorder && culturalTheme?.showBackgroundTexture && (
+            <SpreadCulturalWatermark palette={activePalette} borderStyle={activeBorder} />
+          )}
+
+          {isCultural && activePalette && (
+            <>
+              <CenterGutterMedallion palette={activePalette} position="top" />
+              <CenterGutterMedallion palette={activePalette} position="bottom" />
+            </>
+          )}
+
           {/* ================= PRINT OVERLAY GUIDELINES ================= */}
 
           {/* 1. Bleed Area Guideline (Outside trim line) */}
@@ -362,6 +432,19 @@ export const SpreadCanvasEditor: React.FC<SpreadCanvasEditorProps> = ({
               ? calculateEffectiveDpi(slot, image, printDimensions)
               : null;
 
+            const frameBorderStylesObj: React.CSSProperties = isCultural && activeBorder && activePalette
+              ? {
+                  border: `${activeBorder.borderWidth}px ${activeBorder.borderStyle} ${activeBorder.borderColor}`,
+                  padding: `${activeBorder.innerPadding}px`,
+                  backgroundColor: activePalette.surface,
+                  boxShadow: activeBorder.hasGlow && culturalTheme?.showGoldFoilAccent
+                    ? `0 10px 25px -5px ${activePalette.secondary}35, 0 0 14px ${activePalette.secondary}45, 0 4px 6px -2px rgba(0, 0, 0, 0.25)`
+                    : '0 8px 24px -4px rgba(0, 0, 0, 0.35)',
+                }
+              : {
+                  backgroundColor: '#F5F5F4',
+                };
+
             return (
               <div
                 key={slot.id}
@@ -372,7 +455,7 @@ export const SpreadCanvasEditor: React.FC<SpreadCanvasEditorProps> = ({
                 onDragLeave={(e) => handleSlotDragLeave(e, slot.id)}
                 onDrop={(e) => handleSlotDrop(e, slot.id)}
                 onClick={() => setSelectedSlotId(slot.id)}
-                className={`absolute transition-shadow duration-150 rounded-xs overflow-hidden cursor-pointer ${
+                className={`absolute transition-all duration-150 rounded-xs cursor-pointer ${
                   isSelected
                     ? 'ring-2 ring-amber-500 shadow-lg z-10'
                     : 'hover:ring-1 hover:ring-stone-400'
@@ -386,12 +469,22 @@ export const SpreadCanvasEditor: React.FC<SpreadCanvasEditorProps> = ({
                   top: `${slot.y * 100}%`,
                   width: `${slot.width * 100}%`,
                   height: `${slot.height * 100}%`,
-                  backgroundColor: '#F5F5F4', // Warm off-white frame placeholder
+                  ...frameBorderStylesObj,
                 }}
               >
+                {/* Cultural Corner Motifs */}
+                {isCultural && activeBorder && culturalTheme?.showCornerMotifs && (
+                  <>
+                    <CornerMotif position="top-left" type={activeBorder.cornerMotif} color={activeBorder.borderColor} accentColor={activeBorder.accentColor} size={28} />
+                    <CornerMotif position="top-right" type={activeBorder.cornerMotif} color={activeBorder.borderColor} accentColor={activeBorder.accentColor} size={28} />
+                    <CornerMotif position="bottom-left" type={activeBorder.cornerMotif} color={activeBorder.borderColor} accentColor={activeBorder.accentColor} size={28} />
+                    <CornerMotif position="bottom-right" type={activeBorder.cornerMotif} color={activeBorder.borderColor} accentColor={activeBorder.accentColor} size={28} />
+                  </>
+                )}
+
                 {image ? (
                   <div
-                    className="relative w-full h-full overflow-hidden"
+                    className="relative w-full h-full overflow-hidden rounded-xs"
                     onMouseDown={(e) => handlePanMouseDown(e, slot)}
                   >
                     {/* Clipped and Panned/Zoomed Image */}
