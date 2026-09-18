@@ -24,6 +24,7 @@ import {
   Scissors,
   Sparkles,
   Maximize2,
+  Wand2,
 } from 'lucide-react';
 
 interface SpreadCanvasEditorProps {
@@ -37,6 +38,7 @@ interface SpreadCanvasEditorProps {
   onAssignImageToSlot: (slotId: string, imageId: string) => void;
   onChangeTemplate: (templateId: string) => void;
   onSelectPhotoToPreview?: (image: ImageAsset) => void;
+  onOpenAiStudioForSlot?: (slotId: string, image?: ImageAsset | null) => void;
 }
 
 export const SpreadCanvasEditor: React.FC<SpreadCanvasEditorProps> = ({
@@ -49,6 +51,8 @@ export const SpreadCanvasEditor: React.FC<SpreadCanvasEditorProps> = ({
   onSwapSlots,
   onAssignImageToSlot,
   onChangeTemplate,
+  onSelectPhotoToPreview,
+  onOpenAiStudioForSlot,
 }) => {
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(
     currentSpread.slots[0]?.id || null
@@ -572,6 +576,19 @@ export const SpreadCanvasEditor: React.FC<SpreadCanvasEditorProps> = ({
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 border-l border-stone-800 pl-4">
+                {/* AI Edit Action */}
+                {onOpenAiStudioForSlot && (
+                  <button
+                    id="btn-slot-ai-edit"
+                    onClick={() => onOpenAiStudioForSlot(selectedSlot.id, selectedImage)}
+                    className="px-2.5 py-1.5 rounded text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Edit this photo with Gemini 3.1 Flash Image"
+                  >
+                    <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+                    <span>AI Edit</span>
+                  </button>
+                )}
+
                 <button
                   id="btn-auto-center-face"
                   onClick={handleAutoCenterSaliency}

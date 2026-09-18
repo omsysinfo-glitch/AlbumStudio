@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { PageSpread, GuideVisibility, PrintDimensions } from '../types';
+import { PageSpread, GuideVisibility, EventType } from '../types';
+import { EVENT_BATCHES } from '../data/mockAlbumData';
 import {
   BookOpen,
   Sparkles,
@@ -9,10 +10,10 @@ import {
   ChevronRight,
   Plus,
   Eye,
-  Sliders,
   CheckCircle2,
-  AlertTriangle,
-  Code2,
+  Calendar,
+  ChevronDown,
+  Wand2,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -26,6 +27,9 @@ interface HeaderProps {
   onToggleGuide: (key: keyof GuideVisibility) => void;
   onOpenExportModal: () => void;
   preflightIssueCount: number;
+  currentEventType: EventType;
+  onChangeEventType: (type: EventType) => void;
+  onOpenAiStudio: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,16 +43,23 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleGuide,
   onOpenExportModal,
   preflightIssueCount,
+  currentEventType,
+  onChangeEventType,
+  onOpenAiStudio,
 }) => {
   const [showGuidesMenu, setShowGuidesMenu] = useState(false);
+  const [showEventMenu, setShowEventMenu] = useState(false);
+
+  const currentEvent = EVENT_BATCHES[currentEventType] || EVENT_BATCHES.indian_wedding;
 
   return (
     <header
       id="app-main-header"
-      className="bg-stone-950 border-b border-stone-800 text-stone-100 px-6 py-2.5 flex items-center justify-between shrink-0 z-30"
+      className="bg-stone-950 border-b border-stone-800 text-stone-100 px-5 py-2.5 flex items-center justify-between shrink-0 z-30"
     >
-      {/* Left: Brand Identity & View Navigation Tabs */}
-      <div className="flex items-center gap-6">
+      {/* Left: Brand Identity, Event Switcher & Navigation Tabs */}
+      <div className="flex items-center gap-4">
+        {/* Brand */}
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-stone-950 shadow-md">
             <BookOpen className="w-4 h-4" />
@@ -64,7 +75,57 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Major App Modes Switcher */}
+        {/* Event Selector Dropdown */}
+        <div className="relative">
+          <button
+            id="btn-event-selector"
+            onClick={() => setShowEventMenu(!showEventMenu)}
+            className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-850 border border-stone-800 text-xs flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <Calendar className="w-3.5 h-3.5 text-amber-400" />
+            <div className="text-left">
+              <span className="font-semibold text-stone-200 block text-[11px] leading-tight">
+                {currentEvent.tag}
+              </span>
+            </div>
+            <ChevronDown className="w-3 h-3 text-stone-400" />
+          </button>
+
+          {showEventMenu && (
+            <div
+              id="event-dropdown-menu"
+              className="absolute left-0 mt-2 w-72 bg-stone-950 border border-stone-800 rounded-xl shadow-2xl p-2 z-50 text-xs space-y-1"
+            >
+              <div className="px-2 py-1 text-[10px] font-semibold text-stone-500 uppercase tracking-wider">
+                Select Album Event Template:
+              </div>
+              {Object.entries(EVENT_BATCHES).map(([key, ev]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    onChangeEventType(key as EventType);
+                    setShowEventMenu(false);
+                  }}
+                  className={`w-full text-left p-2 rounded-lg transition-colors cursor-pointer ${
+                    currentEventType === key
+                      ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
+                      : 'hover:bg-stone-900 text-stone-300'
+                  }`}
+                >
+                  <div className="font-semibold text-[11px] flex items-center justify-between">
+                    <span>{ev.name}</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-stone-900 text-stone-400">
+                      {ev.tag}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-stone-500 mt-0.5">{ev.subtitle}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* View Mode Switcher */}
         <nav className="flex items-center gap-1 bg-stone-900 p-1 rounded-lg border border-stone-800 text-xs">
           <button
             id="nav-btn-canvas-editor"
@@ -102,12 +163,12 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Server className="w-3.5 h-3.5" />
-            <span>System Architecture Spec</span>
+            <span>Architecture Spec</span>
           </button>
         </nav>
       </div>
 
-      {/* Center: Double-Page Spread Navigation (when in Canvas mode) */}
+      {/* Center: Spread Navigation (when in Canvas mode) */}
       {currentView === 'canvas' && (
         <div className="flex items-center gap-2">
           <button
@@ -124,7 +185,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 key={spread.id}
                 onClick={() => onSelectSpreadIndex(idx)}
-                className={`px-2.5 py-1 rounded-md text-xs font-mono font-medium transition-all ${
+                className={`px-2.5 py-1 rounded-md text-xs font-mono font-medium transition-all cursor-pointer ${
                   idx === currentSpreadIndex
                     ? 'bg-amber-500 text-stone-950 shadow-sm'
                     : 'bg-stone-900 text-stone-400 hover:text-stone-200 hover:bg-stone-850'
@@ -137,7 +198,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               title="Add New Spread"
               onClick={onAddSpread}
-              className="p-1.5 rounded-md bg-stone-900 hover:bg-stone-800 text-stone-400 hover:text-stone-200 border border-stone-800 transition-colors"
+              className="p-1.5 rounded-md bg-stone-900 hover:bg-stone-800 text-stone-400 hover:text-stone-200 border border-stone-800 transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -156,8 +217,21 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      {/* Right: Print Guidelines Toggles & Preflight Export */}
-      <div className="flex items-center gap-3">
+      {/* Right: AI Photo Studio, Guidelines & Preflight Export */}
+      <div className="flex items-center gap-2.5">
+        {/* Gemini AI Photo Studio Button */}
+        <button
+          id="btn-header-ai-studio"
+          onClick={onOpenAiStudio}
+          className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 border border-amber-500/40 text-amber-300 font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+        >
+          <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+          <span>AI Photo Studio</span>
+          <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-amber-500/30 text-amber-200">
+            Gemini
+          </span>
+        </button>
+
         {/* Guides Popover Toggle */}
         <div className="relative">
           <button
@@ -166,7 +240,7 @@ export const Header: React.FC<HeaderProps> = ({
             className="px-2.5 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-stone-300 border border-stone-800 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Eye className="w-3.5 h-3.5 text-stone-400" />
-            <span>Print Guides</span>
+            <span>Guides</span>
           </button>
 
           {showGuidesMenu && (
@@ -253,7 +327,7 @@ export const Header: React.FC<HeaderProps> = ({
           className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
         >
           <Printer className="w-3.5 h-3.5" />
-          <span>300 DPI Preflight &amp; Export</span>
+          <span>300 DPI Preflight</span>
           {preflightIssueCount > 0 ? (
             <span className="px-1.5 py-0.2 rounded-full bg-stone-950 text-amber-300 text-[10px] font-mono">
               {preflightIssueCount}

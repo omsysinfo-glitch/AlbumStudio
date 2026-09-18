@@ -10,12 +10,12 @@ import {
   PrintDimensions,
   GuideVisibility,
   FrameSlot,
+  EventType,
 } from './types';
 import {
   DEFAULT_PRINT_DIMENSIONS,
   SPREAD_TEMPLATES,
-  SAMPLE_EVENT_PHOTOS,
-  INITIAL_SPREADS,
+  EVENT_BATCHES,
 } from './data/mockAlbumData';
 import { solveAlbumSpreads } from './utils/layoutSolver';
 import { runAlbumPreflightAudit } from './utils/printPreflight';
@@ -25,15 +25,28 @@ import { PhotoPoolSidebar } from './components/PhotoPoolSidebar';
 import { ArchitectureHub } from './components/ArchitectureHub';
 import { SolverInspector } from './components/SolverInspector';
 import { PrintExportModal } from './components/PrintExportModal';
-import { X, User, Calendar, Sparkles, AlertCircle } from 'lucide-react';
+import { AiImageStudioModal } from './components/AiImageStudioModal';
+import { X, Calendar, Sparkles, Wand2 } from 'lucide-react';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<'canvas' | 'solver' | 'architecture'>('canvas');
-  const [photos, setPhotos] = useState<ImageAsset[]>(SAMPLE_EVENT_PHOTOS);
-  const [spreads, setSpreads] = useState<PageSpread[]>(INITIAL_SPREADS);
+
+  // Event Batch Selection (Default: Indian Wedding)
+  const [currentEventType, setCurrentEventType] = useState<EventType>('indian_wedding');
+
+  const initialEventBatch = EVENT_BATCHES[currentEventType];
+  const [photos, setPhotos] = useState<ImageAsset[]>(initialEventBatch.photos);
+  const [spreads, setSpreads] = useState<PageSpread[]>(initialEventBatch.defaultSpreads);
   const [currentSpreadIndex, setCurrentSpreadIndex] = useState(0);
+
+  // Modals
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [inspectingPhoto, setInspectingPhoto] = useState<ImageAsset | null>(null);
+
+  // AI Photo Studio State (Gemini 3.1 Flash Image)
+  const [isAiStudioOpen, setIsAiStudioOpen] = useState(false);
+  const [aiStudioPhotoToEdit, setAiStudioPhotoToEdit] = useState<ImageAsset | null>(null);
+  const [aiStudioTargetSlotId, setAiStudioTargetSlotId] = useState<string | null>(null);
 
   // Guide Visibilities
   const [guides, setGuides] = useState<GuideVisibility>({
@@ -46,6 +59,15 @@ export default function App() {
   });
 
   const printDimensions: PrintDimensions = DEFAULT_PRINT_DIMENSIONS;
+
+  // Switch Event Batch (Indian Wedding, Birthday, Anniversary, etc.)
+  const handleChangeEventType = (newType: EventType) => {
+    setCurrentEventType(newType);
+    const batch = EVENT_BATCHES[newType] || EVENT_BATCHES.indian_wedding;
+    setPhotos(batch.photos);
+    setSpreads(batch.defaultSpreads);
+    setCurrentSpreadIndex(0);
+  };
 
   // Build O(1) image lookup map
   const imageMap = useMemo(() => {
@@ -129,72 +151,76 @@ export default function App() {
     );
   };
 
-  // Assign photo to slot directly from sidebar pool or drop
+  // Assign image to a frame slot from photo pool
   const handleAssignImageToSlot = (slotId: string, imageId: string) => {
     setSpreads((prev) =>
       prev.map((spread, sIdx) => {
         if (sIdx !== currentSpreadIndex) return spread;
         return {
           ...spread,
-          slots: spread.slots.map((slot) =>
-            slot.id === slotId
-              ? {
-                  ...slot,
-                  assignedImageId: imageId,
-                  cropPanX: 0,
-                  cropPanY: 0,
-                  zoom: 1.0,
-                }
-              : slot
-          ),
+          slots: spread.slots.map((slot) => {
+            if (slot.id === slotId) {
+              return {
+                ...slot,
+                assignedImageId: imageId,
+                cropPanX: 0,
+                cropPanY: 0,
+                zoom: 1.0,
+                rotation: 0,
+              };
+            }
+            return slot;
+          }),
         };
       })
     );
   };
 
-  // Change Template for the current spread
+  // Change current spread layout template
   const handleChangeTemplate = (templateId: string) => {
     const template = SPREAD_TEMPLATES.find((t) => t.id === templateId);
     if (!template) return;
 
+    // Collect currently placed image IDs
+    const assignedIds = currentSpread.slots
+      .map((s) => s.assignedImageId)
+      .filter(Boolean) as string[];
+
+    // Map existing assigned images to new template slots
+    const newSlots: FrameSlot[] = template.slots.map((tplSlot, idx) => ({
+      ...tplSlot,
+      id: `slot-${currentSpread.id}-${idx + 1}`,
+      assignedImageId: assignedIds[idx] || null,
+      cropPanX: 0,
+      cropPanY: 0,
+      zoom: 1.0,
+      rotation: 0,
+    }));
+
     setSpreads((prev) =>
       prev.map((spread, sIdx) => {
         if (sIdx !== currentSpreadIndex) return spread;
-
-        // Preserve currently assigned photos as much as possible
-        const existingImageIds = spread.slots
-          .map((s) => s.assignedImageId)
-          .filter(Boolean) as string[];
-
-        const newSlots: FrameSlot[] = template.slots.map((slotTpl, idx) => ({
-          ...slotTpl,
-          assignedImageId: existingImageIds[idx] || null,
-          cropPanX: 0,
-          cropPanY: 0,
-          zoom: 1.0,
-        }));
-
         return {
           ...spread,
-          templateId,
+          templateId: template.id,
           slots: newSlots,
         };
       })
     );
   };
 
-  // Add a new blank spread
+  // Add a blank new spread to the album
   const handleAddSpread = () => {
-    const newSpreadNumber = spreads.length + 1;
-    const defaultTemplate = SPREAD_TEMPLATES[1]; // 2-photo split template
+    const template = SPREAD_TEMPLATES[1]; // default balanced duo
     const newSpread: PageSpread = {
-      id: `spread-${Date.now()}`,
-      spreadNumber: newSpreadNumber,
-      title: `Double-Page Spread #${newSpreadNumber}`,
-      templateId: defaultTemplate.id,
+      id: `spread-custom-${Date.now()}`,
+      spreadNumber: spreads.length + 1,
+      title: `Spread ${spreads.length + 1}`,
+      templateId: template.id,
       background: '#FFFFFF',
-      slots: defaultTemplate.slots.map((s) => ({
+      slots: template.slots.map((s, idx) => ({
         ...s,
+        id: `slot-new-${Date.now()}-${idx + 1}`,
         assignedImageId: null,
         cropPanX: 0,
         cropPanY: 0,
@@ -227,6 +253,39 @@ export default function App() {
     setGuides((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // AI Studio Handlers
+  const handleOpenAiStudio = (photoToEdit?: ImageAsset | null, targetSlotId?: string | null) => {
+    setAiStudioPhotoToEdit(photoToEdit || null);
+    setAiStudioTargetSlotId(targetSlotId || null);
+    setIsAiStudioOpen(true);
+  };
+
+  const handleAddGeneratedPhoto = (newAsset: ImageAsset, placeInSlotId?: string) => {
+    setPhotos((prev) => [newAsset, ...prev]);
+    if (placeInSlotId) {
+      handleAssignImageToSlot(placeInSlotId, newAsset.id);
+    }
+  };
+
+  const handleUpdateEditedPhoto = (updatedAsset: ImageAsset, targetSlotId?: string) => {
+    setPhotos((prev) => [updatedAsset, ...prev]);
+    if (targetSlotId) {
+      handleAssignImageToSlot(targetSlotId, updatedAsset.id);
+    } else if (aiStudioPhotoToEdit) {
+      // If the edited photo was assigned to any slots, update them
+      setSpreads((prev) =>
+        prev.map((spread) => ({
+          ...spread,
+          slots: spread.slots.map((slot) =>
+            slot.assignedImageId === aiStudioPhotoToEdit.id
+              ? { ...slot, assignedImageId: updatedAsset.id }
+              : slot
+          ),
+        }))
+      );
+    }
+  };
+
   return (
     <div id="foliocraft-app-root" className="flex flex-col h-screen w-screen overflow-hidden bg-stone-900 text-stone-100 font-sans">
       {/* Primary Top Header */}
@@ -241,6 +300,9 @@ export default function App() {
         onToggleGuide={handleToggleGuide}
         onOpenExportModal={() => setIsExportModalOpen(true)}
         preflightIssueCount={preflightAudit.issues.length}
+        currentEventType={currentEventType}
+        onChangeEventType={handleChangeEventType}
+        onOpenAiStudio={() => handleOpenAiStudio(null, null)}
       />
 
       {/* Main App Workspace */}
@@ -254,6 +316,8 @@ export default function App() {
               onUploadPhotos={handleUploadPhotos}
               onSelectPhotoPreview={(p) => setInspectingPhoto(p)}
               onTriggerAutoSolver={handleTriggerAutoSolver}
+              onOpenAiStudio={(p) => handleOpenAiStudio(p || null, null)}
+              currentEventType={currentEventType}
             />
 
             {/* Center Spread Canvas Workspace */}
@@ -268,6 +332,8 @@ export default function App() {
                 onSwapSlots={handleSwapSlots}
                 onAssignImageToSlot={handleAssignImageToSlot}
                 onChangeTemplate={handleChangeTemplate}
+                onSelectPhotoToPreview={(img) => setInspectingPhoto(img)}
+                onOpenAiStudioForSlot={(slotId, img) => handleOpenAiStudio(img || null, slotId)}
               />
             </div>
           </>
@@ -283,6 +349,17 @@ export default function App() {
 
         {currentView === 'architecture' && <ArchitectureHub />}
       </main>
+
+      {/* AI Photo Studio Modal (Gemini 3.1 Flash Image preview) */}
+      <AiImageStudioModal
+        isOpen={isAiStudioOpen}
+        onClose={() => setIsAiStudioOpen(false)}
+        currentEventType={currentEventType}
+        onAddGeneratedPhoto={handleAddGeneratedPhoto}
+        onUpdateEditedPhoto={handleUpdateEditedPhoto}
+        targetSlotId={aiStudioTargetSlotId}
+        photoToEdit={aiStudioPhotoToEdit}
+      />
 
       {/* 300 DPI CMYK Print Exporter Modal */}
       <PrintExportModal
@@ -312,7 +389,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => setInspectingPhoto(null)}
-                className="p-1 rounded text-stone-400 hover:text-stone-200"
+                className="p-1 rounded text-stone-400 hover:text-stone-200 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -364,9 +441,23 @@ export default function App() {
               </div>
             </div>
 
-            <div className="text-[11px] text-stone-400 flex items-center gap-1.5 pt-1">
-              <Calendar className="w-3.5 h-3.5 text-stone-500" />
-              <span>Timestamp: {new Date(inspectingPhoto.timestamp).toLocaleString()}</span>
+            <div className="flex items-center justify-between pt-1">
+              <div className="text-[11px] text-stone-400 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-stone-500" />
+                <span>Timestamp: {new Date(inspectingPhoto.timestamp).toLocaleString()}</span>
+              </div>
+
+              <button
+                onClick={() => {
+                  const photo = inspectingPhoto;
+                  setInspectingPhoto(null);
+                  handleOpenAiStudio(photo, null);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-xs flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                <span>Edit with AI</span>
+              </button>
             </div>
           </div>
         </div>

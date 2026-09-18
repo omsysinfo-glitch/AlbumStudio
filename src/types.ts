@@ -1,11 +1,25 @@
 export type Orientation = 'landscape' | 'portrait' | 'square';
 
+export type EventType = 'indian_wedding' | 'western_wedding' | 'birthday' | 'anniversary' | 'custom';
+
+export interface EventBatch {
+  id: EventType;
+  name: string;
+  subtitle: string;
+  description: string;
+  tag: string;
+  photos: ImageAsset[];
+  defaultSpreads: PageSpread[];
+  aiPromptSuggestions: string[];
+}
+
 export interface SaliencyRegion {
   x: number; // normalized 0..1
   y: number; // normalized 0..1
   width: number; // normalized 0..1
   height: number; // normalized 0..1
   label?: string; // 'face' | 'subject' | 'focal_point'
+  confidence?: number;
 }
 
 export interface ImageAsset {
@@ -22,7 +36,13 @@ export interface ImageAsset {
   clusterId?: string;
   saliency: SaliencyRegion[];
   qualityScore: number; // 0..100 (sharpness, exposure, aesthetic)
-  tags: string[];
+  tags?: string[];
+  eventTag?: string;
+  isAiGenerated?: boolean;
+  isAiEdited?: boolean;
+  promptUsed?: string;
+  editPromptUsed?: string;
+  modelUsed?: string;
 }
 
 export interface FrameSlot {

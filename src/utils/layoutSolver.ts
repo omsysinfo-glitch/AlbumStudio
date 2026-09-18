@@ -154,7 +154,7 @@ export function solveAlbumSpreads(
     spreads.push({
       id: `spread-auto-${clusterIdx + 1}`,
       spreadNumber: clusterIdx + 1,
-      title: `Spread ${clusterIdx + 1}: ${cluster[0]?.tags[0] ? cluster[0].tags[0].toUpperCase() : 'Chapter ' + (clusterIdx + 1)}`,
+      title: `Spread ${clusterIdx + 1}: ${cluster[0]?.tags?.[0] ? cluster[0].tags[0].toUpperCase() : 'Chapter ' + (clusterIdx + 1)}`,
       templateId: bestTemplate.id,
       slots: spreadSlots,
       background: '#FFFFFF',

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ImageAsset, Orientation } from '../types';
+import { ImageAsset, Orientation, EventType } from '../types';
 import {
   Upload,
   Image as ImageIcon,
@@ -10,6 +10,9 @@ import {
   Clock,
   User,
   Plus,
+  Wand2,
+  Tag,
+  Palette,
 } from 'lucide-react';
 
 interface PhotoPoolSidebarProps {
@@ -18,6 +21,8 @@ interface PhotoPoolSidebarProps {
   onUploadPhotos: (newPhotos: ImageAsset[]) => void;
   onSelectPhotoPreview: (photo: ImageAsset) => void;
   onTriggerAutoSolver: () => void;
+  onOpenAiStudio: (photoToEdit?: ImageAsset) => void;
+  currentEventType?: EventType;
 }
 
 export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
@@ -26,16 +31,25 @@ export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
   onUploadPhotos,
   onSelectPhotoPreview,
   onTriggerAutoSolver,
+  onOpenAiStudio,
+  currentEventType = 'indian_wedding',
 }) => {
   const [filter, setFilter] = useState<'all' | 'unassigned' | 'placed' | 'portrait' | 'landscape'>('all');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [isDragOverUpload, setIsDragOverUpload] = useState(false);
+
+  // Extract unique ceremony/event tags from current photos
+  const availableTags = Array.from(
+    new Set(photos.map((p) => p.eventTag).filter(Boolean) as string[])
+  );
 
   const filteredPhotos = photos.filter((p) => {
     const isAssigned = assignedImageIds.has(p.id);
-    if (filter === 'unassigned') return !isAssigned;
-    if (filter === 'placed') return isAssigned;
-    if (filter === 'portrait') return p.orientation === 'portrait';
-    if (filter === 'landscape') return p.orientation === 'landscape';
+    if (filter === 'unassigned' && isAssigned) return false;
+    if (filter === 'placed' && !isAssigned) return false;
+    if (filter === 'portrait' && p.orientation !== 'portrait') return false;
+    if (filter === 'landscape' && p.orientation !== 'landscape') return false;
+    if (selectedTag && p.eventTag !== selectedTag) return false;
     return true;
   });
 
@@ -70,7 +84,7 @@ export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
         orientation: isPortrait ? 'portrait' : 'landscape',
         timestamp: new Date().toISOString(),
         qualityScore: 94,
-        tags: ['uploaded', 'event'],
+        eventTag: 'Uploaded',
         saliency: [
           { x: 0.35, y: 0.25, width: 0.3, height: 0.3, label: 'subject' },
         ],
@@ -85,13 +99,13 @@ export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
       id="photo-pool-sidebar"
       className="w-80 h-full bg-stone-950 border-r border-stone-800 flex flex-col shrink-0 text-stone-200"
     >
-      {/* Sidebar Header & Solver CTA */}
-      <div className="p-4 border-b border-stone-800 bg-stone-950">
-        <div className="flex items-center justify-between mb-3">
+      {/* Sidebar Header & Action CTAs */}
+      <div className="p-3.5 border-b border-stone-800 bg-stone-950 space-y-2.5">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ImageIcon className="w-4 h-4 text-amber-500" />
             <h2 className="text-xs font-semibold uppercase tracking-wider text-stone-300">
-              Event Photo Batch
+              Event Photo Pool
             </h2>
           </div>
           <span className="text-xs px-2 py-0.5 rounded-full bg-stone-900 border border-stone-800 text-stone-400 font-mono">
@@ -99,15 +113,26 @@ export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
           </span>
         </div>
 
-        {/* 1-Click AI Auto-Solver Button */}
-        <button
-          id="btn-sidebar-auto-solve"
-          onClick={onTriggerAutoSolver}
-          className="w-full py-2 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-medium text-xs flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
-        >
-          <Sparkles className="w-4 h-4 text-stone-950" />
-          <span>Auto-Curate &amp; Solve Spreads</span>
-        </button>
+        {/* Action Buttons: Auto-Solve & AI Studio */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            id="btn-sidebar-auto-solve"
+            onClick={onTriggerAutoSolver}
+            className="py-2 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-stone-950" />
+            <span>AI Auto-Solve</span>
+          </button>
+
+          <button
+            id="btn-sidebar-ai-generate"
+            onClick={() => onOpenAiStudio()}
+            className="py-2 px-2.5 rounded-lg bg-stone-900 hover:bg-stone-850 border border-amber-500/40 text-amber-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+            <span>AI Generate</span>
+          </button>
+        </div>
 
         {/* Drag & Drop Upload Dropzone */}
         <label
@@ -121,14 +146,14 @@ export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
             setIsDragOverUpload(false);
             handleFileUpload(e.dataTransfer.files);
           }}
-          className={`mt-3 flex items-center justify-center gap-2 py-2 px-3 border border-dashed rounded-lg text-xs cursor-pointer transition-colors ${
+          className={`flex items-center justify-center gap-2 py-1.5 px-3 border border-dashed rounded-lg text-xs cursor-pointer transition-colors ${
             isDragOverUpload
               ? 'border-amber-400 bg-amber-500/10 text-amber-300'
               : 'border-stone-800 hover:border-stone-700 bg-stone-900/60 text-stone-400 hover:text-stone-300'
           }`}
         >
           <Upload className="w-3.5 h-3.5" />
-          <span>Upload Event Photos (or Drag files)</span>
+          <span>Upload Photos (or drop files)</span>
           <input
             id="file-upload-input"
             type="file"
@@ -140,8 +165,37 @@ export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
         </label>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="px-4 py-2 border-b border-stone-800 bg-stone-950 flex items-center gap-1 overflow-x-auto text-[11px]">
+      {/* Ceremony / Category Tag Filter (especially helpful for Indian weddings with multi-day events) */}
+      {availableTags.length > 0 && (
+        <div className="px-3 py-1.5 border-b border-stone-850 bg-stone-950/80 overflow-x-auto flex items-center gap-1.5 no-scrollbar">
+          <button
+            onClick={() => setSelectedTag(null)}
+            className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-colors ${
+              selectedTag === null
+                ? 'bg-amber-500 text-stone-950 font-bold'
+                : 'bg-stone-900 text-stone-400 hover:text-stone-200'
+            }`}
+          >
+            All Rituals
+          </button>
+          {availableTags.map((t) => (
+            <button
+              key={t}
+              onClick={() => setSelectedTag(selectedTag === t ? null : t)}
+              className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-colors ${
+                selectedTag === t
+                  ? 'bg-amber-500 text-stone-950 font-bold'
+                  : 'bg-stone-900 text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Status Filter Tabs */}
+      <div className="px-3 py-1.5 border-b border-stone-800 bg-stone-950 flex items-center gap-1 overflow-x-auto text-[11px]">
         {(
           [
             { id: 'all', label: `All (${photos.length})` },
@@ -154,7 +208,7 @@ export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
           <button
             key={tab.id}
             onClick={() => setFilter(tab.id)}
-            className={`px-2 py-1 rounded whitespace-nowrap transition-colors ${
+            className={`px-2 py-0.5 rounded whitespace-nowrap transition-colors ${
               filter === tab.id
                 ? 'bg-stone-800 text-stone-100 font-medium'
                 : 'text-stone-500 hover:text-stone-300'
@@ -172,7 +226,6 @@ export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
       >
         {filteredPhotos.map((photo) => {
           const isPlaced = assignedImageIds.has(photo.id);
-          const hasFace = photo.saliency.some((s) => s.label === 'face');
 
           return (
             <div
@@ -181,9 +234,9 @@ export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
               draggable
               onDragStart={(e) => handleDragStart(e, photo)}
               onClick={() => onSelectPhotoPreview(photo)}
-              className={`group relative rounded-md overflow-hidden border transition-all cursor-grab active:cursor-grabbing ${
+              className={`group relative rounded-lg overflow-hidden border transition-all cursor-grab active:cursor-grabbing ${
                 isPlaced
-                  ? 'border-stone-800/80 opacity-60 hover:opacity-100'
+                  ? 'border-stone-800/80 opacity-70 hover:opacity-100'
                   : 'border-stone-800 hover:border-amber-500/80 shadow-xs'
               }`}
             >
@@ -198,44 +251,61 @@ export const PhotoPoolSidebar: React.FC<PhotoPoolSidebarProps> = ({
                 />
 
                 {/* Status Badges */}
-                <div className="absolute top-1.5 left-1.5 flex flex-wrap gap-1">
-                  {isPlaced && (
-                    <span className="bg-emerald-950/90 text-emerald-300 text-[9px] px-1 py-0.5 rounded font-mono flex items-center gap-0.5 shadow-xs">
-                      <CheckCircle className="w-2.5 h-2.5" /> Placed
-                    </span>
-                  )}
-                  {hasFace && (
-                    <span className="bg-amber-950/80 text-amber-300 text-[9px] px-1 py-0.5 rounded font-mono flex items-center gap-0.5">
-                      <User className="w-2.5 h-2.5" /> Face
-                    </span>
-                  )}
+                {isPlaced && (
+                  <div className="absolute top-1 right-1 bg-amber-500 text-stone-950 text-[10px] font-bold px-1.5 py-0.2 rounded-md shadow-xs flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    <span>Placed</span>
+                  </div>
+                )}
+
+                {/* AI Generated / AI Edited Badge */}
+                {photo.isAiGenerated && (
+                  <div className="absolute top-1 left-1 bg-stone-950/80 text-amber-300 text-[9px] font-mono px-1.5 py-0.2 rounded border border-amber-500/40">
+                    AI Gen
+                  </div>
+                )}
+                {photo.isAiEdited && (
+                  <div className="absolute top-1 left-1 bg-stone-950/80 text-cyan-300 text-[9px] font-mono px-1.5 py-0.2 rounded border border-cyan-500/40">
+                    AI Edit
+                  </div>
+                )}
+
+                {/* Orientation & Quality Badge */}
+                <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between text-[10px] text-white/90 drop-shadow-sm px-1 font-mono">
+                  <span className="capitalize">{photo.orientation}</span>
+                  <span className="text-amber-300">{photo.qualityScore}pt</span>
                 </div>
 
-                {/* Orientation & Quality Tag */}
-                <div className="absolute bottom-1 right-1 bg-stone-950/80 text-stone-400 text-[9px] px-1 py-0.2 rounded font-mono">
-                  {photo.orientation === 'portrait' ? 'PORT' : 'LAND'}
+                {/* Hover overlay with AI Edit quick button */}
+                <div className="absolute inset-0 bg-stone-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
+                  <button
+                    title="Edit with AI"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenAiStudio(photo);
+                    }}
+                    className="p-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-[10px] flex items-center gap-1 shadow-md transition-transform active:scale-95"
+                  >
+                    <Wand2 className="w-3 h-3" />
+                    <span>AI Edit</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Title & Metadata */}
-              <div className="p-1.5 bg-stone-900/90 text-left">
-                <div className="text-[11px] font-medium text-stone-300 truncate" title={photo.title}>
+              {/* Title & Tag */}
+              <div className="p-1.5 bg-stone-950/90 text-left">
+                <p className="text-[11px] font-medium text-stone-200 truncate" title={photo.title}>
                   {photo.title}
-                </div>
-                <div className="text-[9px] text-stone-500 font-mono flex items-center justify-between mt-0.5">
-                  <span>{new Date(photo.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  <span className="text-amber-400/90">{photo.qualityScore}% Q</span>
-                </div>
+                </p>
+                {photo.eventTag && (
+                  <span className="text-[9px] text-stone-500 block truncate">
+                    {photo.eventTag}
+                  </span>
+                )}
               </div>
             </div>
           );
         })}
-
-        {filteredPhotos.length === 0 && (
-          <div className="col-span-2 py-8 text-center text-xs text-stone-500">
-            No photos match current filter.
-          </div>
-        )}
       </div>
     </div>
   );
