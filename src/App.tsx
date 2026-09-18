@@ -1,620 +1,644 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useMemo } from 'react';
 import {
-  ImageAsset,
-  PageSpread,
-  PrintDimensions,
+  KarizmaProject,
+  AlbumSheet,
+  AlbumObject,
+  PhotoObject,
+  TextObject,
+  KarizmaPhoto,
   GuideVisibility,
-  FrameSlot,
-  EventType,
-  CulturalThemeConfig,
-  AutoThemeAnalysis,
-} from './types';
+  KarizmaTemplate,
+  DesignStyle,
+  SheetRecommendation,
+} from './types/karizma';
+import { SAMPLE_PROJECT, SAMPLE_PHOTOS, INITIAL_ALBUM_SHEETS } from './data/sampleKarizmaData';
+import { KARIZMA_TEMPLATES } from './data/karizmaTemplates';
+import { KARIZMA_DESIGN_STYLES } from './data/karizmaStyles';
+import { generateAiAlbumSheets } from './utils/aiAlbumGenerator';
 import {
-  DEFAULT_PRINT_DIMENSIONS,
-  SPREAD_TEMPLATES,
-  EVENT_BATCHES,
-  DEFAULT_CULTURAL_THEME_CONFIG,
-  INDIAN_WEDDING_COLOR_PALETTES,
-  INDIAN_WEDDING_BORDER_STYLES,
-} from './data/mockAlbumData';
-import { solveAlbumSpreads } from './utils/layoutSolver';
-import { runAlbumPreflightAudit } from './utils/printPreflight';
-import { analyzeAndAutoTheme } from './utils/autoThemeEngine';
-import { Header } from './components/Header';
-import { SpreadCanvasEditor } from './components/SpreadCanvasEditor';
-import { PhotoPoolSidebar } from './components/PhotoPoolSidebar';
-import { ArchitectureHub } from './components/ArchitectureHub';
-import { SolverInspector } from './components/SolverInspector';
-import { PrintExportModal } from './components/PrintExportModal';
-import { AiImageStudioModal } from './components/AiImageStudioModal';
-import { PrintPreviewModal } from './components/PrintPreviewModal';
-import { X, Calendar, Sparkles, Wand2, Check, Printer, ChevronRight } from 'lucide-react';
+  analyzeSheetForImprovements,
+  applyRecommendationToSheet,
+} from './utils/aiImproveEngine';
+import { KarizmaHeader } from './components/KarizmaHeader';
+import { ToolsSidebar } from './components/ToolsSidebar';
+import { KarizmaCanvasEditor } from './components/KarizmaCanvasEditor';
+import { PropertiesAndLayersPanel } from './components/PropertiesAndLayersPanel';
+import { BottomSheetsFilmstrip } from './components/BottomSheetsFilmstrip';
+import { ProjectWizardModal } from './components/ProjectWizardModal';
+import { CoverDesignerModal } from './components/CoverDesignerModal';
+import { ClientPreviewModal } from './components/ClientPreviewModal';
+import { KarizmaExportModal } from './components/KarizmaExportModal';
+import { AiReplacePhotoModal } from './components/AiReplacePhotoModal';
+import { AiImproveSheetModal } from './components/AiImproveSheetModal';
+import { PhotoDetailModal } from './components/PhotoDetailModal';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'canvas' | 'solver' | 'architecture'>('canvas');
+  // 1. Core State: Project, Sheets, Photos
+  const [project, setProject] = useState<KarizmaProject>(SAMPLE_PROJECT);
+  const [photos, setPhotos] = useState<KarizmaPhoto[]>(SAMPLE_PHOTOS);
+  const [sheets, setSheets] = useState<AlbumSheet[]>(INITIAL_ALBUM_SHEETS);
+  const [activeSheetId, setActiveSheetId] = useState<string>(
+    INITIAL_ALBUM_SHEETS[0]?.id || 'sheet-1'
+  );
 
-  // Event Batch Selection (Default: Indian Wedding)
-  const [currentEventType, setCurrentEventType] = useState<EventType>('indian_wedding');
+  // 2. Selection State
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
 
-  const initialEventBatch = EVENT_BATCHES[currentEventType];
-  const [photos, setPhotos] = useState<ImageAsset[]>(initialEventBatch.photos);
-  const [spreads, setSpreads] = useState<PageSpread[]>(initialEventBatch.defaultSpreads);
-  const [currentSpreadIndex, setCurrentSpreadIndex] = useState(0);
-
-  // Modals
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
-  const [inspectingPhoto, setInspectingPhoto] = useState<ImageAsset | null>(null);
-  const [showAutoThemeBanner, setShowAutoThemeBanner] = useState(true);
-
-  // AI Photo Studio State (Gemini 3.1 Flash Image)
-  const [isAiStudioOpen, setIsAiStudioOpen] = useState(false);
-  const [aiStudioPhotoToEdit, setAiStudioPhotoToEdit] = useState<ImageAsset | null>(null);
-  const [aiStudioTargetSlotId, setAiStudioTargetSlotId] = useState<string | null>(null);
-
-  // Guide Visibilities
+  // 3. Canvas Guides State
   const [guides, setGuides] = useState<GuideVisibility>({
     bleed: true,
     trim: true,
     safeZone: true,
     gutter: true,
-    saliencyFocal: true,
+    saliencyFocal: false,
     dimensionsOverlay: false,
   });
 
-  const printDimensions: PrintDimensions = DEFAULT_PRINT_DIMENSIONS;
-
-  // Cultural Elements & Theming State (Intelligently Auto-Themed on Initialization)
-  const initialPalettes = initialEventBatch.culturalPalettes || INDIAN_WEDDING_COLOR_PALETTES;
-  const initialBorderStyles = initialEventBatch.frameBorderStyles || INDIAN_WEDDING_BORDER_STYLES;
-
-  const [autoThemeAnalysis, setAutoThemeAnalysis] = useState<AutoThemeAnalysis | null>(() => {
-    return analyzeAndAutoTheme('indian_wedding', initialEventBatch.photos, initialPalettes, initialBorderStyles);
-  });
-
-  const [culturalTheme, setCulturalTheme] = useState<CulturalThemeConfig>(() => {
-    const analysis = analyzeAndAutoTheme('indian_wedding', initialEventBatch.photos, initialPalettes, initialBorderStyles);
-    return {
-      enabled: true,
-      activePaletteId: analysis.paletteId,
-      activeBorderStyleId: analysis.borderStyleId,
-      showCornerMotifs: true,
-      showBackgroundTexture: true,
-      showGoldFoilAccent: true,
-      paperFinish: analysis.recommendedFinish,
-      autoThemeRationale: analysis.primaryRationale,
-    };
-  });
-
-  const handleUpdateCulturalTheme = (updates: Partial<CulturalThemeConfig>) => {
-    setCulturalTheme((prev) => ({ ...prev, ...updates }));
+  const handleToggleGuide = (key: keyof GuideVisibility) => {
+    setGuides((prev: GuideVisibility) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const currentPalettes = EVENT_BATCHES[currentEventType]?.culturalPalettes || INDIAN_WEDDING_COLOR_PALETTES;
-  const currentBorderStyles = EVENT_BATCHES[currentEventType]?.frameBorderStyles || INDIAN_WEDDING_BORDER_STYLES;
+  // 4. Modals State
+  const [isProjectWizardOpen, setIsProjectWizardOpen] = useState(false);
+  const [isCoverDesignerOpen, setIsCoverDesignerOpen] = useState(false);
+  const [isClientPreviewOpen, setIsClientPreviewOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isAiImproveOpen, setIsAiImproveOpen] = useState(false);
+  const [isAiReplaceOpen, setIsAiReplaceOpen] = useState(false);
+  const [aiReplaceTargetSlot, setAiReplaceTargetSlot] = useState<PhotoObject | null>(null);
+  const [inspectedPhoto, setInspectedPhoto] = useState<KarizmaPhoto | null>(null);
 
-  // Switch Event Batch (Indian Wedding, Birthday, Anniversary, etc.)
-  // Automatically runs Auto-Theme Engine on newly selected batch!
-  const handleChangeEventType = (newType: EventType) => {
-    setCurrentEventType(newType);
-    const batch = EVENT_BATCHES[newType] || EVENT_BATCHES.indian_wedding;
-    setPhotos(batch.photos);
-    setSpreads(batch.defaultSpreads);
-    setCurrentSpreadIndex(0);
-
-    const palettes = batch.culturalPalettes || INDIAN_WEDDING_COLOR_PALETTES;
-    const borderStyles = batch.frameBorderStyles || INDIAN_WEDDING_BORDER_STYLES;
-    const analysis = analyzeAndAutoTheme(newType, batch.photos, palettes, borderStyles);
-
-    setAutoThemeAnalysis(analysis);
-    setCulturalTheme((prev) => ({
-      ...prev,
-      enabled: true,
-      activePaletteId: analysis.paletteId,
-      activeBorderStyleId: analysis.borderStyleId,
-      paperFinish: analysis.recommendedFinish,
-      autoThemeRationale: analysis.primaryRationale,
-    }));
-    setShowAutoThemeBanner(true);
-  };
-
-  // Re-run Auto-Theme on current photo pool
-  const handleTriggerAutoTheme = () => {
-    const analysis = analyzeAndAutoTheme(currentEventType, photos, currentPalettes, currentBorderStyles);
-    setAutoThemeAnalysis(analysis);
-    setCulturalTheme((prev) => ({
-      ...prev,
-      enabled: true,
-      activePaletteId: analysis.paletteId,
-      activeBorderStyleId: analysis.borderStyleId,
-      paperFinish: analysis.recommendedFinish,
-      autoThemeRationale: analysis.primaryRationale,
-    }));
-    setShowAutoThemeBanner(true);
-  };
-
-  // Build O(1) image lookup map
-  const imageMap = useMemo(() => {
-    const map = new Map<string, ImageAsset>();
+  // Photos Map for O(1) Lookups
+  const photosMap = useMemo(() => {
+    const map = new Map<string, KarizmaPhoto>();
     photos.forEach((p) => map.set(p.id, p));
     return map;
   }, [photos]);
 
-  // Set of all currently assigned image IDs across all spreads
-  const assignedImageIds = useMemo(() => {
-    const set = new Set<string>();
-    spreads.forEach((spread) => {
-      spread.slots.forEach((slot) => {
-        if (slot.assignedImageId) {
-          set.add(slot.assignedImageId);
-        }
-      });
-    });
-    return set;
-  }, [spreads]);
+  // Current Active Sheet
+  const currentSheet = useMemo(() => {
+    return sheets.find((s) => s.id === activeSheetId) || sheets[0];
+  }, [sheets, activeSheetId]);
 
-  // Preflight issue count for header badge
-  const preflightAudit = useMemo(() => {
-    return runAlbumPreflightAudit(spreads, imageMap, printDimensions);
-  }, [spreads, imageMap, printDimensions]);
+  // Active Sheet AI Recommendations
+  const currentSheetRecs = useMemo(() => {
+    if (!currentSheet) return [];
+    return analyzeSheetForImprovements(currentSheet, photosMap);
+  }, [currentSheet, photosMap]);
 
-  const currentSpread = spreads[currentSpreadIndex] || spreads[0];
+  // --------------------------------------------------------------------------
+  // SHEET & OBJECT MUTATION HANDLERS
+  // --------------------------------------------------------------------------
 
-  // Update specific frame slot properties (e.g. pan, zoom, crop)
-  const handleUpdateSlot = (slotId: string, updates: Partial<FrameSlot>) => {
-    setSpreads((prev) =>
-      prev.map((spread, sIdx) => {
-        if (sIdx !== currentSpreadIndex) return spread;
+  const handleUpdateObject = (objectId: string, updates: Partial<AlbumObject>) => {
+    setSheets((prevSheets) =>
+      prevSheets.map((sheet) => {
+        if (sheet.id !== activeSheetId) return sheet;
         return {
-          ...spread,
-          slots: spread.slots.map((slot) =>
-            slot.id === slotId ? { ...slot, ...updates } : slot
+          ...sheet,
+          objects: sheet.objects.map((obj) =>
+            obj.id === objectId ? ({ ...obj, ...updates } as AlbumObject) : obj
           ),
         };
       })
     );
   };
 
-  // Swap photos between two slots with drag and drop
-  const handleSwapSlots = (sourceSlotId: string, targetSlotId: string) => {
-    setSpreads((prev) =>
-      prev.map((spread, sIdx) => {
-        if (sIdx !== currentSpreadIndex) return spread;
-        const sourceSlot = spread.slots.find((s) => s.id === sourceSlotId);
-        const targetSlot = spread.slots.find((s) => s.id === targetSlotId);
-        if (!sourceSlot || !targetSlot) return spread;
+  const handleDuplicateObject = (objectId: string) => {
+    setSheets((prevSheets) =>
+      prevSheets.map((sheet) => {
+        if (sheet.id !== activeSheetId) return sheet;
+        const target = sheet.objects.find((o) => o.id === objectId);
+        if (!target) return sheet;
 
-        const sourceImageId = sourceSlot.assignedImageId;
-        const targetImageId = targetSlot.assignedImageId;
+        const duplicated: AlbumObject = {
+          ...target,
+          id: `obj-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          name: `${target.name} Copy`,
+          x: Math.min(0.8, target.x + 0.03),
+          y: Math.min(0.8, target.y + 0.03),
+          zIndex: sheet.objects.length + 1,
+        };
 
         return {
-          ...spread,
-          slots: spread.slots.map((slot) => {
-            if (slot.id === sourceSlotId) {
-              return {
-                ...slot,
-                assignedImageId: targetImageId,
-                cropPanX: 0,
-                cropPanY: 0,
-                zoom: 1.0,
-              };
-            }
-            if (slot.id === targetSlotId) {
-              return {
-                ...slot,
-                assignedImageId: sourceImageId,
-                cropPanX: 0,
-                cropPanY: 0,
-                zoom: 1.0,
-              };
-            }
-            return slot;
-          }),
+          ...sheet,
+          objects: [...sheet.objects, duplicated],
         };
       })
     );
   };
 
-  // Assign image to a frame slot from photo pool
-  const handleAssignImageToSlot = (slotId: string, imageId: string) => {
-    setSpreads((prev) =>
-      prev.map((spread, sIdx) => {
-        if (sIdx !== currentSpreadIndex) return spread;
+  const handleDeleteObject = (objectId: string) => {
+    setSheets((prevSheets) =>
+      prevSheets.map((sheet) => {
+        if (sheet.id !== activeSheetId) return sheet;
         return {
-          ...spread,
-          slots: spread.slots.map((slot) => {
-            if (slot.id === slotId) {
-              return {
-                ...slot,
-                assignedImageId: imageId,
-                cropPanX: 0,
-                cropPanY: 0,
-                zoom: 1.0,
-                rotation: 0,
-              };
-            }
-            return slot;
-          }),
+          ...sheet,
+          objects: sheet.objects.filter((o) => o.id !== objectId),
         };
+      })
+    );
+    if (selectedObjectId === objectId) setSelectedObjectId(null);
+  };
+
+  const handleReorderObject = (objectId: string, direction: 'up' | 'down') => {
+    setSheets((prevSheets) =>
+      prevSheets.map((sheet) => {
+        if (sheet.id !== activeSheetId) return sheet;
+        const objIndex = sheet.objects.findIndex((o) => o.id === objectId);
+        if (objIndex === -1) return sheet;
+
+        const newObjects = [...sheet.objects];
+        const targetIndex = direction === 'up' ? objIndex + 1 : objIndex - 1;
+        if (targetIndex < 0 || targetIndex >= newObjects.length) return sheet;
+
+        const temp = newObjects[objIndex];
+        newObjects[objIndex] = newObjects[targetIndex];
+        newObjects[targetIndex] = temp;
+
+        // Reassign zIndexes
+        newObjects.forEach((o, i) => {
+          o.zIndex = i + 1;
+        });
+
+        return { ...sheet, objects: newObjects };
       })
     );
   };
 
-  // Change current spread layout template
-  const handleChangeTemplate = (templateId: string) => {
-    const template = SPREAD_TEMPLATES.find((t) => t.id === templateId);
-    if (!template) return;
+  const handleAddObjectToSheet = (obj: Partial<AlbumObject>) => {
+    setSheets((prevSheets) =>
+      prevSheets.map((sheet) => {
+        if (sheet.id !== activeSheetId) return sheet;
+        const newObj: AlbumObject = {
+          id: obj.id || `obj-${Date.now()}`,
+          type: obj.type || 'text',
+          name: obj.name || 'New Element',
+          x: obj.x ?? 0.4,
+          y: obj.y ?? 0.4,
+          width: obj.width ?? 0.2,
+          height: obj.height ?? 0.2,
+          rotation: 0,
+          opacity: 1,
+          zIndex: sheet.objects.length + 1,
+          isLocked: false,
+          ...obj,
+        } as AlbumObject;
 
-    // Collect currently placed image IDs
-    const assignedIds = currentSpread.slots
-      .map((s) => s.assignedImageId)
+        return {
+          ...sheet,
+          objects: [...sheet.objects, newObj],
+        };
+      })
+    );
+    if (obj.id) setSelectedObjectId(obj.id);
+  };
+
+  // --------------------------------------------------------------------------
+  // AI TOOLS & ACTIONS
+  // --------------------------------------------------------------------------
+
+  const handleOpenAiReplace = (slot: PhotoObject) => {
+    setAiReplaceTargetSlot(slot);
+    setIsAiReplaceOpen(true);
+  };
+
+  const handleSelectReplacementPhoto = (newPhotoId: string) => {
+    if (aiReplaceTargetSlot) {
+      handleUpdateObject(aiReplaceTargetSlot.id, {
+        photoId: newPhotoId,
+      });
+    }
+  };
+
+  const handleSmartFaceCrop = (slot: PhotoObject) => {
+    if (!slot.photoId) return;
+    const photo = photosMap.get(slot.photoId);
+    if (!photo || photo.analysis.faceCount === 0) return;
+
+    const primaryFace = photo.analysis.faces[0];
+    // Pan toward face safe center
+    const targetPanY = Math.round((0.5 - (primaryFace.box.y + primaryFace.box.height / 2)) * 50);
+    handleUpdateObject(slot.id, {
+      cropPanY: targetPanY,
+      zoom: 1.1,
+    });
+  };
+
+  const handleApplySingleRecommendation = (recId: string) => {
+    const updated = applyRecommendationToSheet(currentSheet, recId, photos);
+    setSheets((prev) => prev.map((s) => (s.id === currentSheet.id ? updated : s)));
+  };
+
+  const handleApplyAllRecommendations = () => {
+    let updated = currentSheet;
+    currentSheetRecs.forEach((r) => {
+      if (!r.applied) {
+        updated = applyRecommendationToSheet(updated, r.id, photos);
+      }
+    });
+    setSheets((prev) => prev.map((s) => (s.id === currentSheet.id ? updated : s)));
+    setIsAiImproveOpen(false);
+  };
+
+  const handleTriggerAiAlbumGenerate = () => {
+    const generated = generateAiAlbumSheets(photos, project.albumSize, project.sheetCount);
+    setSheets(generated);
+    if (generated.length > 0) setActiveSheetId(generated[0].id);
+  };
+
+  // --------------------------------------------------------------------------
+  // TEMPLATES & DESIGN STYLES APPLICATION
+  // --------------------------------------------------------------------------
+
+  const handleApplyTemplate = (template: KarizmaTemplate) => {
+    // Convert template slots to AlbumObjects, retaining any existing photos where possible
+    const existingPhotoIds = currentSheet.objects
+      .filter((o): o is PhotoObject => o.type === 'photo')
+      .map((p) => p.photoId)
       .filter(Boolean) as string[];
 
-    // Map existing assigned images to new template slots
-    const newSlots: FrameSlot[] = template.slots.map((tplSlot, idx) => ({
-      ...tplSlot,
-      id: `slot-${currentSpread.id}-${idx + 1}`,
-      assignedImageId: assignedIds[idx] || null,
-      cropPanX: 0,
-      cropPanY: 0,
-      zoom: 1.0,
-      rotation: 0,
-    }));
+    let photoIdx = 0;
+    const newObjects: AlbumObject[] = template.photoSlots.map((slot, i) => {
+      const assignedId =
+        existingPhotoIds[photoIdx++] ||
+        photos[i % photos.length]?.id ||
+        null;
 
-    setSpreads((prev) =>
-      prev.map((spread, sIdx) => {
-        if (sIdx !== currentSpreadIndex) return spread;
-        return {
-          ...spread,
-          templateId: template.id,
-          slots: newSlots,
-        };
-      })
-    );
-  };
-
-  // Add a blank new spread to the album
-  const handleAddSpread = () => {
-    const template = SPREAD_TEMPLATES[1]; // default balanced duo
-    const newSpread: PageSpread = {
-      id: `spread-custom-${Date.now()}`,
-      spreadNumber: spreads.length + 1,
-      title: `Spread ${spreads.length + 1}`,
-      templateId: template.id,
-      background: '#FFFFFF',
-      slots: template.slots.map((s, idx) => ({
-        ...s,
-        id: `slot-new-${Date.now()}-${idx + 1}`,
-        assignedImageId: null,
+      return {
+        id: `slot-${Date.now()}-${i}`,
+        type: 'photo',
+        name: `Photo Slot ${i + 1}`,
+        x: slot.x,
+        y: slot.y,
+        width: slot.width,
+        height: slot.height,
+        rotation: 0,
+        opacity: 1,
+        zIndex: i + 1,
+        photoId: assignedId,
         cropPanX: 0,
         cropPanY: 0,
         zoom: 1.0,
+        fitMode: 'cover',
+        borderWidth: 3,
+        borderColor: '#D4AF37',
+        borderStyle: 'double',
+        borderRadius: 2,
+        shadowOffsetX: 0,
+        shadowOffsetY: 4,
+        shadowBlur: 12,
+        shadowColor: 'rgba(0,0,0,0.5)',
+      };
+    });
+
+    // Add template decorative and text elements
+    if (template.textSlots) {
+      template.textSlots.forEach((t, i) => {
+        newObjects.push({
+          id: `txt-${Date.now()}-${i}`,
+          type: 'text',
+          name: 'Ceremony Title',
+          x: t.x,
+          y: t.y,
+          width: t.width,
+          height: t.height,
+          rotation: 0,
+          opacity: 1,
+          zIndex: 10 + i,
+          text: t.defaultText,
+          fontFamily: t.fontFamily,
+          fontSize: t.fontSize,
+          fontWeight: 'bold',
+          fontStyle: 'normal',
+          color: '#D4AF37',
+          letterSpacing: 2,
+          lineHeight: 1.2,
+          textAlign: t.textAlign,
+        });
+      });
+    }
+
+    setSheets((prev) =>
+      prev.map((s) => {
+        if (s.id !== activeSheetId) return s;
+        return {
+          ...s,
+          title: template.name,
+          templateId: template.id,
+          background: template.background,
+          objects: newObjects,
+        };
+      })
+    );
+  };
+
+  const handleApplyStyle = (style: DesignStyle) => {
+    setSheets((prev) =>
+      prev.map((s) => {
+        const updatedObjects = s.objects.map((obj) => {
+          if (obj.type === 'photo') {
+            return {
+              ...obj,
+              borderColor: style.borderStyle.color,
+              borderWidth: style.borderStyle.width,
+              borderStyle: style.borderStyle.style as any,
+              borderRadius: style.borderStyle.radius,
+            };
+          }
+          if (obj.type === 'text') {
+            return {
+              ...obj,
+              color: style.colors.secondary,
+              fontFamily: style.typography.headingFont,
+            };
+          }
+          return obj;
+        });
+
+        return {
+          ...s,
+          background: style.defaultBackground,
+          objects: updatedObjects,
+        };
+      })
+    );
+  };
+
+  // --------------------------------------------------------------------------
+  // SPREAD / FILMSTRIP MANAGEMENT
+  // --------------------------------------------------------------------------
+
+  const handleAddSheet = () => {
+    const newSheetNum = sheets.length + 1;
+    const newSheet: AlbumSheet = {
+      id: `sheet-${Date.now()}`,
+      sheetNumber: newSheetNum,
+      title: `Spread ${String(newSheetNum).padStart(2, '0')} • Wedding Ceremony`,
+      ceremonyTag: 'Wedding',
+      templateId: 'tpl-royal-darbar-01',
+      background: {
+        type: 'gradient',
+        value: 'linear-gradient(135deg, #1A070B 0%, #290A13 100%)',
+      },
+      objects: [
+        {
+          id: `slot-init-1`,
+          type: 'photo',
+          name: 'Hero Showcase Portrait',
+          x: 0.08,
+          y: 0.1,
+          width: 0.38,
+          height: 0.8,
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          photoId: photos[newSheetNum % photos.length]?.id || null,
+          cropPanX: 0,
+          cropPanY: 0,
+          zoom: 1.0,
+          fitMode: 'cover',
+          borderWidth: 3,
+          borderColor: '#D4AF37',
+          borderStyle: 'double',
+          borderRadius: 4,
+          shadowOffsetX: 0,
+          shadowOffsetY: 6,
+          shadowBlur: 16,
+          shadowColor: 'rgba(0,0,0,0.6)',
+        },
+      ],
+      recommendations: [],
+      comments: [],
+    };
+
+    setSheets((prev) => [...prev, newSheet]);
+    setActiveSheetId(newSheet.id);
+  };
+
+  const handleDuplicateSheet = (sheetId: string) => {
+    const target = sheets.find((s) => s.id === sheetId);
+    if (!target) return;
+
+    const dup: AlbumSheet = {
+      ...target,
+      id: `sheet-${Date.now()}`,
+      sheetNumber: sheets.length + 1,
+      title: `${target.title} (Copy)`,
+      objects: target.objects.map((o) => ({
+        ...o,
+        id: `obj-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       })),
     };
 
-    setSpreads((prev) => [...prev, newSpread]);
-    setCurrentSpreadIndex(spreads.length);
+    setSheets((prev) => [...prev, dup]);
+    setActiveSheetId(dup.id);
   };
 
-  // Upload custom photos
-  const handleUploadPhotos = (newPhotos: ImageAsset[]) => {
-    setPhotos((prev) => [...newPhotos, ...prev]);
-  };
-
-  // Execute AI auto-solver and apply spreads
-  const handleApplySolvedSpreads = (newSpreads: PageSpread[]) => {
-    setSpreads(newSpreads);
-    setCurrentSpreadIndex(0);
-    setCurrentView('canvas');
-  };
-
-  const handleTriggerAutoSolver = () => {
-    const result = solveAlbumSpreads(photos, SPREAD_TEMPLATES);
-    handleApplySolvedSpreads(result.spreads);
-  };
-
-  const handleToggleGuide = (key: keyof GuideVisibility) => {
-    setGuides((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  // AI Studio Handlers
-  const handleOpenAiStudio = (photoToEdit?: ImageAsset | null, targetSlotId?: string | null) => {
-    setAiStudioPhotoToEdit(photoToEdit || null);
-    setAiStudioTargetSlotId(targetSlotId || null);
-    setIsAiStudioOpen(true);
-  };
-
-  const handleAddGeneratedPhoto = (newAsset: ImageAsset, placeInSlotId?: string) => {
-    setPhotos((prev) => [newAsset, ...prev]);
-    if (placeInSlotId) {
-      handleAssignImageToSlot(placeInSlotId, newAsset.id);
+  const handleDeleteSheet = (sheetId: string) => {
+    if (sheets.length <= 1) return;
+    const remaining = sheets.filter((s) => s.id !== sheetId);
+    // Renumber sheets
+    const renumbered = remaining.map((s, idx) => ({ ...s, sheetNumber: idx + 1 }));
+    setSheets(renumbered);
+    if (activeSheetId === sheetId) {
+      setActiveSheetId(renumbered[0]?.id || '');
     }
   };
 
-  const handleUpdateEditedPhoto = (updatedAsset: ImageAsset, targetSlotId?: string) => {
-    setPhotos((prev) => [updatedAsset, ...prev]);
-    if (targetSlotId) {
-      handleAssignImageToSlot(targetSlotId, updatedAsset.id);
-    } else if (aiStudioPhotoToEdit) {
-      // If the edited photo was assigned to any slots, update them
-      setSpreads((prev) =>
-        prev.map((spread) => ({
-          ...spread,
-          slots: spread.slots.map((slot) =>
-            slot.assignedImageId === aiStudioPhotoToEdit.id
-              ? { ...slot, assignedImageId: updatedAsset.id }
-              : slot
-          ),
-        }))
-      );
-    }
+  const handleMoveSheet = (sheetId: string, direction: 'left' | 'right') => {
+    const idx = sheets.findIndex((s) => s.id === sheetId);
+    if (idx === -1) return;
+
+    const targetIdx = direction === 'left' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= sheets.length) return;
+
+    const newSheets = [...sheets];
+    const temp = newSheets[idx];
+    newSheets[idx] = newSheets[targetIdx];
+    newSheets[targetIdx] = temp;
+
+    // Renumber
+    newSheets.forEach((s, i) => {
+      s.sheetNumber = i + 1;
+    });
+
+    setSheets(newSheets);
+  };
+
+  // Client Comments & Approval
+  const handleAddComment = (sheetId: string, text: string) => {
+    setSheets((prev) =>
+      prev.map((s) => {
+        if (s.id !== sheetId) return s;
+        const newComment = {
+          id: `comment-${Date.now()}`,
+          sheetId,
+          authorName: 'Client (Priya Sharma)',
+          authorRole: 'client' as const,
+          timestamp: new Date().toISOString(),
+          commentText: text,
+          status: 'open' as const,
+        };
+        return {
+          ...s,
+          comments: [...(s.comments || []), newComment],
+        };
+      })
+    );
+  };
+
+  const handleApproveAlbum = () => {
+    setProject((prev) => ({ ...prev, status: 'approved' }));
+    setIsClientPreviewOpen(false);
   };
 
   return (
-    <div id="foliocraft-app-root" className="flex flex-col h-screen w-screen overflow-hidden bg-stone-900 text-stone-100 font-sans">
-      {/* Primary Top Header */}
-      <Header
-        currentView={currentView}
-        onChangeView={setCurrentView}
-        spreads={spreads}
-        currentSpreadIndex={currentSpreadIndex}
-        onSelectSpreadIndex={setCurrentSpreadIndex}
-        onAddSpread={handleAddSpread}
-        guides={guides}
-        onToggleGuide={handleToggleGuide}
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-zinc-950 font-sans text-zinc-100">
+      {/* 1. TOP HEADER */}
+      <KarizmaHeader
+        project={project}
+        currentSheet={currentSheet}
+        sheetCount={sheets.length}
+        activeView="editor"
+        onChangeView={(view) => {
+          if (view === 'cover') setIsCoverDesignerOpen(true);
+          if (view === 'preview') setIsClientPreviewOpen(true);
+        }}
+        onOpenProjectWizard={() => setIsProjectWizardOpen(true)}
+        onOpenCoverDesigner={() => setIsCoverDesignerOpen(true)}
+        onOpenClientPreview={() => setIsClientPreviewOpen(true)}
         onOpenExportModal={() => setIsExportModalOpen(true)}
-        preflightIssueCount={preflightAudit.issues.length}
-        currentEventType={currentEventType}
-        onChangeEventType={handleChangeEventType}
-        onOpenAiStudio={() => handleOpenAiStudio(null, null)}
-        onOpenPrintPreview={() => setIsPrintPreviewOpen(true)}
+        onOpenAiImprove={() => setIsAiImproveOpen(true)}
+        onAutoGenerateAlbum={handleTriggerAiAlbumGenerate}
       />
 
-      {/* Main App Workspace */}
-      <main className="flex-1 flex overflow-hidden relative">
-        {currentView === 'canvas' && (
-          <>
-            {/* Left Photo Pool Sidebar */}
-            <PhotoPoolSidebar
-              photos={photos}
-              assignedImageIds={assignedImageIds}
-              onUploadPhotos={handleUploadPhotos}
-              onSelectPhotoPreview={(p) => setInspectingPhoto(p)}
-              onTriggerAutoSolver={handleTriggerAutoSolver}
-              onOpenAiStudio={(p) => handleOpenAiStudio(p || null, null)}
-              currentEventType={currentEventType}
-              culturalTheme={culturalTheme}
-              onUpdateCulturalTheme={handleUpdateCulturalTheme}
-              culturalPalettes={currentPalettes}
-              frameBorderStyles={currentBorderStyles}
-              onTriggerAutoTheme={handleTriggerAutoTheme}
-              autoThemeAnalysis={autoThemeAnalysis}
-              onOpenPrintPreview={() => setIsPrintPreviewOpen(true)}
-            />
+      {/* 2. MAIN 3-COLUMN WORKSPACE */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left: Tools, Photos, Templates, Motifs */}
+        <ToolsSidebar
+          photos={photos}
+          onUploadPhotos={(newPhotos) => setPhotos((prev) => [...newPhotos, ...prev])}
+          onApplyTemplate={handleApplyTemplate}
+          onApplyStyle={handleApplyStyle}
+          onAddObjectToSheet={handleAddObjectToSheet}
+          onSelectPhotoToInspect={(photo) => setInspectedPhoto(photo)}
+          onTriggerAiAlbumGenerate={handleTriggerAiAlbumGenerate}
+        />
 
-            {/* Center Spread Canvas Workspace */}
-            <div className="flex-1 h-full overflow-hidden flex flex-col">
-              <SpreadCanvasEditor
-                currentSpread={currentSpread}
-                imageMap={imageMap}
-                printDimensions={printDimensions}
-                guides={guides}
-                templates={SPREAD_TEMPLATES}
-                onUpdateSlot={handleUpdateSlot}
-                onSwapSlots={handleSwapSlots}
-                onAssignImageToSlot={handleAssignImageToSlot}
-                onChangeTemplate={handleChangeTemplate}
-                onSelectPhotoToPreview={(img) => setInspectingPhoto(img)}
-                onOpenAiStudioForSlot={(slotId, img) => handleOpenAiStudio(img || null, slotId)}
-                culturalTheme={culturalTheme}
-                culturalPalettes={currentPalettes}
-                frameBorderStyles={currentBorderStyles}
-                onOpenPrintPreview={() => setIsPrintPreviewOpen(true)}
-                onTriggerAutoTheme={handleTriggerAutoTheme}
-              />
-            </div>
-          </>
-        )}
+        {/* Center: 12x36 Spread Canvas Editor with Interactive Guides & Transform Handles */}
+        <KarizmaCanvasEditor
+          currentSheet={currentSheet}
+          photosMap={photosMap}
+          selectedObjectId={selectedObjectId}
+          onSelectObject={setSelectedObjectId}
+          onUpdateObject={handleUpdateObject}
+          onDuplicateObject={handleDuplicateObject}
+          onDeleteObject={handleDeleteObject}
+          onReorderObject={handleReorderObject}
+          onOpenAiReplace={handleOpenAiReplace}
+          guides={guides}
+          onToggleGuide={handleToggleGuide}
+        />
 
-        {currentView === 'solver' && (
-          <SolverInspector
-            photos={photos}
-            templates={SPREAD_TEMPLATES}
-            onApplySpreads={handleApplySolvedSpreads}
-          />
-        )}
+        {/* Right: Photoshop-like Properties & Layers Inspector */}
+        <PropertiesAndLayersPanel
+          currentSheet={currentSheet}
+          selectedObjectId={selectedObjectId}
+          photosMap={photosMap}
+          onSelectObject={setSelectedObjectId}
+          onUpdateObject={handleUpdateObject}
+          onDuplicateObject={handleDuplicateObject}
+          onDeleteObject={handleDeleteObject}
+          onReorderObject={handleReorderObject}
+          onOpenAiReplace={handleOpenAiReplace}
+          onSmartFaceCrop={handleSmartFaceCrop}
+        />
+      </div>
 
-        {currentView === 'architecture' && <ArchitectureHub />}
-      </main>
-
-      {/* AI Photo Studio Modal (Gemini 3.1 Flash Image preview) */}
-      <AiImageStudioModal
-        isOpen={isAiStudioOpen}
-        onClose={() => setIsAiStudioOpen(false)}
-        currentEventType={currentEventType}
-        onAddGeneratedPhoto={handleAddGeneratedPhoto}
-        onUpdateEditedPhoto={handleUpdateEditedPhoto}
-        targetSlotId={aiStudioTargetSlotId}
-        photoToEdit={aiStudioPhotoToEdit}
+      {/* 3. BOTTOM SHEETS FILMSTRIP */}
+      <BottomSheetsFilmstrip
+        sheets={sheets}
+        activeSheetId={activeSheetId}
+        photosMap={photosMap}
+        onSelectSheet={setActiveSheetId}
+        onAddSheet={handleAddSheet}
+        onDuplicateSheet={handleDuplicateSheet}
+        onDeleteSheet={handleDeleteSheet}
+        onMoveSheet={handleMoveSheet}
       />
 
-      {/* 300 DPI CMYK Print Exporter Modal */}
-      <PrintExportModal
+      {/* 4. MODALS & ASSISTANTS */}
+      {/* Project Creation Wizard */}
+      <ProjectWizardModal
+        isOpen={isProjectWizardOpen}
+        onClose={() => setIsProjectWizardOpen(false)}
+        onCreateProject={(newProj) => {
+          setProject(newProj as KarizmaProject);
+          handleTriggerAiAlbumGenerate();
+        }}
+      />
+
+      {/* Deluxe Cover Designer (Front • Spine • Back hot-foil velvet) */}
+      <CoverDesignerModal
+        isOpen={isCoverDesignerOpen}
+        onClose={() => setIsCoverDesignerOpen(false)}
+        project={project}
+        photos={photos}
+        onUpdateCoverConfig={(coverConfig) =>
+          setProject((prev) => ({ ...prev, coverConfig }))
+        }
+      />
+
+      {/* Client Preview & Approval Mode (Flipbook & Comments) */}
+      <ClientPreviewModal
+        isOpen={isClientPreviewOpen}
+        onClose={() => setIsClientPreviewOpen(false)}
+        project={project}
+        sheets={sheets}
+        photosMap={photosMap}
+        onAddComment={handleAddComment}
+        onApproveAlbum={handleApproveAlbum}
+      />
+
+      {/* High-Resolution Export Engine (300 DPI / jsPDF Multi-page Spread) */}
+      <KarizmaExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
-        spreads={spreads}
-        imageMap={imageMap}
-        printDimensions={printDimensions}
+        project={project}
+        sheets={sheets}
+        photosMap={photosMap}
       />
 
-      {/* Physical Print Preview Modal (Matte / Glossy / Silk Simulation) */}
-      <PrintPreviewModal
-        isOpen={isPrintPreviewOpen}
-        onClose={() => setIsPrintPreviewOpen(false)}
-        spreads={spreads}
-        currentSpreadIndex={currentSpreadIndex}
-        onSelectSpreadIndex={setCurrentSpreadIndex}
-        imageMap={imageMap}
-        printDimensions={printDimensions}
-        culturalTheme={culturalTheme}
-        onUpdateCulturalTheme={handleUpdateCulturalTheme}
-        culturalPalettes={currentPalettes}
-        frameBorderStyles={currentBorderStyles}
-        onOpenExportModal={() => {
-          setIsPrintPreviewOpen(false);
-          setIsExportModalOpen(true);
+      {/* AI Photo Replacement Assistant */}
+      <AiReplacePhotoModal
+        isOpen={isAiReplaceOpen}
+        onClose={() => {
+          setIsAiReplaceOpen(false);
+          setAiReplaceTargetSlot(null);
         }}
-        autoThemeAnalysis={autoThemeAnalysis}
+        targetSlot={aiReplaceTargetSlot}
+        currentPhoto={aiReplaceTargetSlot?.photoId ? photosMap.get(aiReplaceTargetSlot.photoId) || null : null}
+        allPhotos={photos}
+        onSelectReplacement={handleSelectReplacementPhoto}
       />
 
-      {/* Auto-Theme Notification Toast (Dismissible) */}
-      {showAutoThemeBanner && autoThemeAnalysis && (
-        <div
-          id="auto-theme-status-toast"
-          className="fixed bottom-4 right-4 z-40 max-w-md p-3.5 rounded-xl bg-stone-900/95 border border-amber-500/40 shadow-2xl backdrop-blur-md flex items-start gap-3 transition-all"
-        >
-          <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
-            <Wand2 className="w-3.5 h-3.5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                Auto-Themed for {currentEventType === 'indian_wedding' ? 'Indian Wedding' : currentEventType}
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-200">
-                  {autoThemeAnalysis.confidenceScore}% Match
-                </span>
-              </span>
-              <button
-                onClick={() => setShowAutoThemeBanner(false)}
-                className="text-stone-400 hover:text-stone-200 p-0.5 rounded cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <p className="text-[11px] text-stone-300 mt-1 leading-snug">
-              {autoThemeAnalysis.primaryRationale}
-            </p>
-            <div className="flex items-center gap-3 mt-2">
-              <button
-                id="toast-btn-print-preview"
-                onClick={() => {
-                  setShowAutoThemeBanner(false);
-                  setIsPrintPreviewOpen(true);
-                }}
-                className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <Printer className="w-3 h-3" />
-                <span>Simulate Print ({culturalTheme.paperFinish.toUpperCase()})</span>
-                <ChevronRight className="w-3 h-3" />
-              </button>
-              <button
-                onClick={() => setShowAutoThemeBanner(false)}
-                className="text-[11px] text-stone-400 hover:text-stone-300 cursor-pointer"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* AI Sheet Doctor / Improvement Assistant */}
+      <AiImproveSheetModal
+        isOpen={isAiImproveOpen}
+        onClose={() => setIsAiImproveOpen(false)}
+        currentSheet={currentSheet}
+        recommendations={currentSheetRecs}
+        onApplyAll={handleApplyAllRecommendations}
+        onApplySingle={handleApplySingleRecommendation}
+      />
 
-      {/* Photo Saliency & Metadata Detail Modal */}
-      {inspectingPhoto && (
-        <div
-          id="photo-inspect-modal-backdrop"
-          className="fixed inset-0 bg-stone-950/80 backdrop-blur-xs z-50 flex items-center justify-center p-4"
-          onClick={() => setInspectingPhoto(null)}
-        >
-          <div
-            id="photo-inspect-modal-card"
-            className="bg-stone-900 border border-stone-800 rounded-2xl max-w-xl w-full text-stone-200 overflow-hidden shadow-2xl p-6 space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-stone-800">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-400" />
-                <h3 className="font-semibold text-sm text-stone-100">{inspectingPhoto.title}</h3>
-              </div>
-              <button
-                onClick={() => setInspectingPhoto(null)}
-                className="p-1 rounded text-stone-400 hover:text-stone-200 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="relative aspect-[3/2] bg-stone-950 rounded-lg overflow-hidden border border-stone-800">
-              <img
-                src={inspectingPhoto.url}
-                alt={inspectingPhoto.title}
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-contain"
-              />
-              {inspectingPhoto.saliency?.map((sal, idx) => (
-                <div
-                  key={idx}
-                  className="absolute border-2 border-amber-400 bg-amber-400/20 rounded-xs"
-                  style={{
-                    left: `${sal.x * 100}%`,
-                    top: `${sal.y * 100}%`,
-                    width: `${sal.width * 100}%`,
-                    height: `${sal.height * 100}%`,
-                  }}
-                >
-                  <span className="absolute -top-4 left-0 text-[9px] font-mono uppercase bg-stone-950 px-1 py-0.2 rounded text-amber-300">
-                    {sal.label || 'subject'}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-3 gap-2.5 text-xs">
-              <div className="p-2.5 rounded bg-stone-950 border border-stone-800">
-                <span className="text-stone-500 text-[10px] block">Dimensions</span>
-                <span className="font-mono text-stone-200 font-medium">
-                  {inspectingPhoto.width} &times; {inspectingPhoto.height} px
-                </span>
-              </div>
-              <div className="p-2.5 rounded bg-stone-950 border border-stone-800">
-                <span className="text-stone-500 text-[10px] block">Orientation</span>
-                <span className="font-mono text-amber-400 font-medium capitalize">
-                  {inspectingPhoto.orientation}
-                </span>
-              </div>
-              <div className="p-2.5 rounded bg-stone-950 border border-stone-800">
-                <span className="text-stone-500 text-[10px] block">Aesthetic Score</span>
-                <span className="font-mono text-emerald-400 font-medium">
-                  {inspectingPhoto.qualityScore}/100
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <div className="text-[11px] text-stone-400 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-stone-500" />
-                <span>Timestamp: {new Date(inspectingPhoto.timestamp).toLocaleString()}</span>
-              </div>
-
-              <button
-                onClick={() => {
-                  const photo = inspectingPhoto;
-                  setInspectingPhoto(null);
-                  handleOpenAiStudio(photo, null);
-                }}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-xs flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
-              >
-                <Wand2 className="w-3.5 h-3.5" />
-                <span>Edit with AI</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* AI Photo Sensor & Quality Detail Modal */}
+      <PhotoDetailModal
+        isOpen={!!inspectedPhoto}
+        onClose={() => setInspectedPhoto(null)}
+        photo={inspectedPhoto}
+      />
     </div>
   );
 }

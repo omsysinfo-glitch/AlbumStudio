@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import { getStorageService } from './src/server/storage.js';
 
 dotenv.config();
 
@@ -16,6 +17,9 @@ const PORT = 3000;
 // Support large payload for base64 images
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Serve uploaded local images
+app.use('/uploads', express.static(path.resolve('./uploads')));
 
 // Lazy initialize Google GenAI SDK client
 let genAIClient: GoogleGenAI | null = null;
@@ -292,6 +296,174 @@ Return a JSON array of 4 strings with no markdown backticks, where each string d
       ],
     });
   }
+});
+
+// In-memory project and sheets repository (persisted during server session, matching PostgreSQL schema)
+const projectsDb = new Map<string, any>();
+const sheetsDb = new Map<string, any[]>();
+
+// Pre-seed with default project
+const defaultProjectId = 'project-rahul-priya-2026';
+projectsDb.set(defaultProjectId, {
+  id: defaultProjectId,
+  name: 'Rahul & Priya Wedding',
+  clientName: 'Sharma & Verma Family',
+  brideName: 'Priya Sharma',
+  groomName: 'Rahul Verma',
+  weddingDate: '2026-02-12',
+  albumSize: '12x36',
+  sheetCount: 15,
+  designStyleId: 'style-royal-red-gold',
+  status: 'draft',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  coverConfig: {
+    frontTitle: 'OUR WEDDING STORY',
+    frontSubtitle: 'Rahul ♡ Priya',
+    coverPhotoId: 'photo-couple-portrait-01',
+    spineText: 'Rahul & Priya • 12 February 2026',
+    spineWidthInches: 1.2,
+    backText: 'Two Souls • One Journey • Forever',
+    material: 'velvet',
+    foilColor: 'gold',
+  },
+});
+
+// GET /api/projects - List all projects
+app.get('/api/projects', (req, res) => {
+  const projects = Array.from(projectsDb.values());
+  res.json({ success: true, projects });
+});
+
+// POST /api/projects - Create a new Karizma project
+app.post('/api/projects', (req, res) => {
+  const {
+    name,
+    clientName,
+    brideName,
+    groomName,
+    weddingDate,
+    albumSize = '12x36',
+    customWidthInches,
+    customHeightInches,
+    sheetCount = 30,
+    designStyleId = 'style-royal-red-gold',
+    coverConfig,
+  } = req.body;
+
+  if (!name || !brideName || !groomName) {
+    return res.status(400).json({ error: 'name, brideName, and groomName are required' });
+  }
+
+  const id = `project-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const newProject = {
+    id,
+    name,
+    clientName: clientName || `${brideName} & ${groomName} Wedding`,
+    brideName,
+    groomName,
+    weddingDate: weddingDate || new Date().toISOString().split('T')[0],
+    albumSize,
+    customWidthInches,
+    customHeightInches,
+    sheetCount: Number(sheetCount) || 30,
+    designStyleId,
+    status: 'draft',
+    coverConfig: coverConfig || {
+      frontTitle: name.toUpperCase(),
+      frontSubtitle: `${brideName} ♡ ${groomName}`,
+      coverPhotoId: null,
+      spineText: `${brideName} & ${groomName} • ${weddingDate || ''}`,
+      spineWidthInches: 1.0,
+      backText: 'Together Forever',
+      material: 'velvet',
+      foilColor: 'gold',
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  projectsDb.set(id, newProject);
+  sheetsDb.set(id, []);
+
+  res.status(201).json({ success: true, project: newProject });
+});
+
+// GET /api/projects/:id - Get project by ID
+app.get('/api/projects/:id', (req, res) => {
+  const project = projectsDb.get(req.params.id);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+  const sheets = sheetsDb.get(req.params.id) || [];
+  res.json({ success: true, project, sheets });
+});
+
+// PUT /api/projects/:id - Update project settings
+app.put('/api/projects/:id', (req, res) => {
+  const project = projectsDb.get(req.params.id);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const updated = {
+    ...project,
+    ...req.body,
+    updatedAt: new Date().toISOString(),
+  };
+  projectsDb.set(req.params.id, updated);
+  res.json({ success: true, project: updated });
+});
+
+// GET /api/projects/:id/sheets - Get sheets for project
+app.get('/api/projects/:id/sheets', (req, res) => {
+  const sheets = sheetsDb.get(req.params.id) || [];
+  res.json({ success: true, sheets });
+});
+
+// POST /api/projects/:id/sheets - Save or batch-update sheets
+app.post('/api/projects/:id/sheets', (req, res) => {
+  const { sheets } = req.body;
+  if (!Array.isArray(sheets)) {
+    return res.status(400).json({ error: 'sheets array is required' });
+  }
+  sheetsDb.set(req.params.id, sheets);
+  res.json({ success: true, count: sheets.length });
+});
+
+// POST /api/storage/upload - Upload file to storage abstraction
+app.post('/api/storage/upload', async (req, res) => {
+  try {
+    const { base64Data, filename = 'wedding_photo.jpg', mimeType = 'image/jpeg' } = req.body;
+    if (!base64Data) {
+      return res.status(400).json({ error: 'base64Data is required' });
+    }
+
+    const cleanBase64 = base64Data.replace(/^data:[a-z/]+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+
+    const storage = getStorageService();
+    const stored = await storage.uploadFile(buffer, filename, mimeType);
+
+    res.json({
+      success: true,
+      file: stored,
+    });
+  } catch (err: any) {
+    console.error('Storage upload error:', err);
+    res.status(500).json({ error: err.message || 'Failed to upload photo to storage' });
+  }
+});
+
+// GET /api/storage/status - Check storage service status
+app.get('/api/storage/status', (req, res) => {
+  const provider = process.env.STORAGE_PROVIDER || (process.env.AZURE_STORAGE_CONNECTION_STRING ? 'azure' : 'local');
+  res.json({
+    success: true,
+    provider,
+    supportedProviders: ['local', 'azure', 's3'],
+    maxUploadLimitMB: 50,
+  });
 });
 
 // Vite middleware for development & static file serving for production

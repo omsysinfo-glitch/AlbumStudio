@@ -1,6 +1,6 @@
 {
   "name": "FolioCraft - Automated Photo Album Engine & Canvas Editor",
-  "description": "Comprehensive automated photo album engine with ceremony auto-theming, realistic print finish previews (Matte, Glossy, Silk), safe/bleed/gutter guides, intelligent photo pool filtering by quality, orientation, and timestamp clusters, and interactive 2-page print spread canvas editor.",
+  "description": "Professional AI-powered Karizma Wedding Album Maker featuring 12x36 spread canvas editor, AI story generation, 20+ royal and modern templates, face-safe smart cropping, cover designer, and client proofing.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
